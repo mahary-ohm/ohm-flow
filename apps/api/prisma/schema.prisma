@@ -27,6 +27,7 @@ model User {
   lastName            String
   email               String                   @unique
   passwordHash        String
+  sessionVersion      Int                      @default(0)
   role                Role                     @default(USER)
   isActive            Boolean                  @default(true)
   cellId              String?
@@ -72,6 +73,18 @@ model Cell {
   @@index([serviceId, isActive])
 }
 
+model TicketCategory {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  tickets     Ticket[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive, name])
+}
+
 model AgentCell {
   agentId   String
   cellId    String
@@ -89,6 +102,8 @@ model Ticket {
   title           String
   description     String
   status          TicketStatus @default(OPEN)
+  categoryId      String?
+  category        TicketCategory? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   cellId          String
   cell            Cell        @relation(fields: [cellId], references: [id], onDelete: Restrict)
   creatorId       String

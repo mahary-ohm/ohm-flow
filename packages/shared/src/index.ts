@@ -11,6 +11,17 @@ export const TicketQuerySchema = z.object({
 export const CreateTicketSchema = z.object({
   title: z.string().trim().min(3).max(160),
   description: z.string().trim().min(10).max(10000),
+  cellId: z.string().min(1),
+  categoryId: z.string().min(1),
+});
+export const CreateTicketCategorySchema = z.object({
+  name: z.string().trim().min(2).max(80),
+  description: z.string().trim().max(500).optional(),
+});
+export const UpdateTicketCategorySchema = z.object({
+  name: z.string().trim().min(2).max(80).optional(),
+  description: z.string().trim().max(500).nullable().optional(),
+  isActive: z.boolean().optional(),
 });
 export const ChangeStatusSchema = z.object({
   status: TicketStatusSchema,

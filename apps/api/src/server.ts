@@ -9,12 +9,13 @@ import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import argon2 from "argon2";
 import { z, ZodError } from "zod";
-import { ChangeStatusSchema, CommentSchema, CreateTicketSchema, TicketQuerySchema, type Role, type TicketStatus } from "@ohmflow/shared";
+import { ChangeStatusSchema, CommentSchema, CreateTicketCategorySchema, CreateTicketSchema, TicketQuerySchema, UpdateTicketCategorySchema, type Role, type TicketStatus } from "@ohmflow/shared";
 import { prisma } from "./db.js";
 
 declare module "@fastify/session" {
   interface FastifySessionObject {
     userId?: string;
+    sessionVersion?: number;
   }
 }
 
@@ -45,6 +46,7 @@ export async function buildServer() {
       callback(null, !origin || webOrigins.includes(origin) || localDevelopmentOrigin);
     },
     credentials: true,
+    methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   });
   await app.register(cookie);
   await app.register(session, {
@@ -60,11 +62,17 @@ export async function buildServer() {
   app.decorateRequest("authUser", null);
   app.addHook("preHandler", async (request) => {
     if (!request.session.userId) return;
-    request.authUser = await prisma.user.findFirst({
+    const user = await prisma.user.findFirst({
       where: { id: request.session.userId, isActive: true },
-      select: { id: true, firstName: true, lastName: true, email: true, role: true, cellId: true },
+      select: { id: true, firstName: true, lastName: true, email: true, role: true, cellId: true, sessionVersion: true },
     });
-    if (!request.authUser) await request.session.destroy();
+    if (!user || request.session.sessionVersion !== user.sessionVersion) {
+      request.authUser = null;
+      await request.session.destroy();
+      return;
+    }
+    const { sessionVersion: _sessionVersion, ...authUser } = user;
+    request.authUser = authUser;
   });
 
   app.setErrorHandler((error, _request, reply) => {
@@ -84,10 +92,10 @@ export async function buildServer() {
   const canAccessTicket = async (request: FastifyRequest, ticketId: string) => {
     const user = request.authUser;
     if (!user) return false;
-    const ticket = await prisma.ticket.findUnique({ where: { id: ticketId }, select: { cellId: true, assigneeId: true } });
+    const ticket = await prisma.ticket.findUnique({ where: { id: ticketId }, select: { cellId: true, creatorId: true, assigneeId: true } });
     if (!ticket) return false;
     if (user.role === "ADMIN") return true;
-    if (user.role === "USER") return user.cellId === ticket.cellId;
+    if (user.role === "USER") return user.cellId === ticket.cellId || ticket.creatorId === user.id;
     if (ticket.assigneeId === user.id) return true;
     return !!(await prisma.agentCell.findUnique({ where: { agentId_cellId: { agentId: user.id, cellId: ticket.cellId } } }));
   };
@@ -99,6 +107,7 @@ export async function buildServer() {
     if (!user || !user.isActive || !(await argon2.verify(user.passwordHash, input.password))) return reply.code(401).send({ error: "Adresse e-mail ou mot de passe incorrect" });
     await request.session.regenerate();
     request.session.userId = user.id;
+    request.session.sessionVersion = user.sessionVersion;
     return { user: { id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role: user.role, cellId: user.cellId } };
   });
   app.post("/api/v1/auth/logout", { preHandler: requireUser }, async (request, reply) => {
@@ -110,14 +119,14 @@ export async function buildServer() {
 
   app.get("/api/v1/dashboard", { preHandler: requireUser }, async (request) => {
     const user = request.authUser!;
-    const scope = user.role === "ADMIN" ? {} : user.role === "USER" ? { cellId: user.cellId ?? "" } : { OR: [{ cell: { agents: { some: { agentId: user.id } } } }, { assigneeId: user.id }] };
+    const scope = user.role === "ADMIN" ? {} : user.role === "USER" ? { OR: [{ cellId: user.cellId ?? "" }, { creatorId: user.id }] } : { OR: [{ cell: { agents: { some: { agentId: user.id } } } }, { assigneeId: user.id }] };
     const [total, open, inProgress, waiting, resolved, recent, unassigned, activeUsers] = await Promise.all([
       prisma.ticket.count({ where: scope }),
       prisma.ticket.count({ where: { ...scope, status: "OPEN" } }),
       prisma.ticket.count({ where: { ...scope, status: "IN_PROGRESS" } }),
       prisma.ticket.count({ where: { ...scope, status: "WAITING" } }),
       prisma.ticket.count({ where: { ...scope, status: "RESOLVED" } }),
-      prisma.ticket.findMany({ where: scope, orderBy: { updatedAt: "desc" }, take: 8, include: { cell: { include: { service: true } }, creator: safeUser, assignee: safeUser } }),
+      prisma.ticket.findMany({ where: scope, orderBy: { updatedAt: "desc" }, take: 8, include: { cell: { include: { service: true } }, category: true, creator: safeUser, assignee: safeUser } }),
       user.role === "ADMIN" || user.role === "AGENT" ? prisma.ticket.count({ where: { ...scope, status: "OPEN", assigneeId: null } }) : Promise.resolve(0),
       user.role === "ADMIN" ? prisma.user.count({ where: { isActive: true } }) : Promise.resolve(null),
     ]);
@@ -127,14 +136,14 @@ export async function buildServer() {
   app.get("/api/v1/tickets", { preHandler: requireUser }, async (request) => {
     const query = TicketQuerySchema.parse(request.query);
     const user = request.authUser!;
-    const scope = user.role === "ADMIN" ? {} : user.role === "USER" ? { cellId: user.cellId ?? "" } : { OR: [{ cell: { agents: { some: { agentId: user.id } } } }, { assigneeId: user.id }] };
+    const scope = user.role === "ADMIN" ? {} : user.role === "USER" ? { OR: [{ cellId: user.cellId ?? "" }, { creatorId: user.id }] } : { OR: [{ cell: { agents: { some: { agentId: user.id } } } }, { assigneeId: user.id }] };
     const where = {
       ...scope,
       ...(query.status ? { status: query.status } : {}),
       ...(query.q ? { OR: [{ reference: { contains: query.q, mode: "insensitive" as const } }, { title: { contains: query.q, mode: "insensitive" as const } }] } : {}),
     };
     const [items, total] = await Promise.all([
-      prisma.ticket.findMany({ where, orderBy: { updatedAt: "desc" }, skip: (query.page - 1) * query.pageSize, take: query.pageSize, include: { cell: { include: { service: true } }, creator: safeUser, assignee: safeUser } }),
+      prisma.ticket.findMany({ where, orderBy: { updatedAt: "desc" }, skip: (query.page - 1) * query.pageSize, take: query.pageSize, include: { cell: { include: { service: true } }, category: true, creator: safeUser, assignee: safeUser } }),
       prisma.ticket.count({ where }),
     ]);
     return { items, total, page: query.page, pageSize: query.pageSize };
@@ -143,13 +152,14 @@ export async function buildServer() {
   app.post("/api/v1/tickets", { preHandler: requireRole("USER") }, async (request, reply) => {
     const input = CreateTicketSchema.parse(request.body);
     const user = request.authUser!;
-    if (!user.cellId) return reply.code(400).send({ error: "Aucune cellule n'est associee a ce compte" });
-    const activeCell = await prisma.cell.findFirst({ where: { id: user.cellId, isActive: true, service: { isActive: true } } });
-    if (!activeCell) return reply.code(400).send({ error: "La cellule associee a ce compte est inactive" });
+    const activeCell = await prisma.cell.findFirst({ where: { id: input.cellId, isActive: true, service: { isActive: true } } });
+    if (!activeCell) return reply.code(400).send({ error: "La cellule choisie est introuvable ou inactive" });
+    const activeCategory = await prisma.ticketCategory.findFirst({ where: { id: input.categoryId, isActive: true } });
+    if (!activeCategory) return reply.code(400).send({ error: "La catégorie choisie est introuvable ou inactive" });
     const created = await prisma.$transaction(async (tx) => {
       const year = new Date().getFullYear();
       const counter = await tx.ticketReferenceCounter.upsert({ where: { year }, create: { year, next: 1 }, update: { next: { increment: 1 } } });
-      const ticket = await tx.ticket.create({ data: { ...input, reference: `TCK-${year}-${String(counter.next).padStart(5, "0")}`, cellId: user.cellId!, creatorId: user.id }, include: { cell: { include: { service: true } }, creator: safeUser } });
+      const ticket = await tx.ticket.create({ data: { ...input, reference: `TCK-${year}-${String(counter.next).padStart(5, "0")}`, creatorId: user.id }, include: { cell: { include: { service: true } }, category: true, creator: safeUser } });
       await tx.ticketStatusHistory.create({ data: { ticketId: ticket.id, actorId: user.id, to: "OPEN" } });
       return ticket;
     });
@@ -159,7 +169,7 @@ export async function buildServer() {
   app.get("/api/v1/tickets/:id", { preHandler: requireUser }, async (request, reply) => {
     const { id } = z.object({ id: z.string() }).parse(request.params);
     if (!(await canAccessTicket(request, id))) return reply.code(404).send({ error: "Ticket introuvable" });
-    return { ticket: await prisma.ticket.findUnique({ where: { id }, include: { cell: { include: { service: true } }, creator: safeUser, assignee: safeUser, statusHistory: { orderBy: { createdAt: "asc" }, include: { actor: safeUser } }, assignmentHistory: { orderBy: { createdAt: "asc" }, include: { actor: safeUser } }, comments: { orderBy: { createdAt: "asc" }, include: { author: safeUser } } } }) };
+    return { ticket: await prisma.ticket.findUnique({ where: { id }, include: { cell: { include: { service: true } }, category: true, creator: safeUser, assignee: safeUser, statusHistory: { orderBy: { createdAt: "asc" }, include: { actor: safeUser } }, assignmentHistory: { orderBy: { createdAt: "asc" }, include: { actor: safeUser } }, comments: { orderBy: { createdAt: "asc" }, include: { author: safeUser } } } }) };
   });
 
   app.post("/api/v1/tickets/:id/claim", { preHandler: requireRole("AGENT") }, async (request, reply) => {
@@ -235,6 +245,16 @@ export async function buildServer() {
   });
 
   app.get("/api/v1/services", { preHandler: requireUser }, async (request) => ({ items: await prisma.service.findMany({ where: request.authUser?.role === "ADMIN" ? {} : { isActive: true }, orderBy: { name: "asc" }, include: { cells: { where: request.authUser?.role === "ADMIN" ? {} : { isActive: true } } } }) }));
+  app.get("/api/v1/ticket-categories", { preHandler: requireUser }, async (request) => ({ items: await prisma.ticketCategory.findMany({ where: request.authUser?.role === "ADMIN" ? {} : { isActive: true }, orderBy: { name: "asc" } }) }));
+  app.post("/api/v1/ticket-categories", { preHandler: requireRole("ADMIN") }, async (request, reply) => {
+    const input = CreateTicketCategorySchema.parse(request.body);
+    return reply.code(201).send({ category: await prisma.ticketCategory.create({ data: input }) });
+  });
+  app.patch("/api/v1/ticket-categories/:id", { preHandler: requireRole("ADMIN") }, async (request) => {
+    const { id } = z.object({ id: z.string() }).parse(request.params);
+    const input = UpdateTicketCategorySchema.parse(request.body);
+    return { category: await prisma.ticketCategory.update({ where: { id }, data: input }) };
+  });
   app.get("/api/v1/users", { preHandler: requireRole("ADMIN") }, async (request) => {
     const query = z.object({ q: z.string().optional(), role: z.enum(["ADMIN", "USER", "AGENT"]).optional(), page: z.coerce.number().int().min(1).default(1) }).parse(request.query);
     const where = { ...(query.role ? { role: query.role } : {}), ...(query.q ? { OR: [{ firstName: { contains: query.q, mode: "insensitive" as const } }, { lastName: { contains: query.q, mode: "insensitive" as const } }, { email: { contains: query.q, mode: "insensitive" as const } }] } : {}) };
@@ -255,7 +275,11 @@ export async function buildServer() {
   });
   app.patch("/api/v1/users/:id", { preHandler: requireRole("ADMIN") }, async (request, reply) => {
     const { id } = z.object({ id: z.string() }).parse(request.params);
-    const input = z.object({ firstName: z.string().min(1).optional(), lastName: z.string().min(1).optional(), email: z.string().email().optional(), role: z.enum(["ADMIN", "USER", "AGENT"]).optional(), cellId: z.string().nullable().optional(), isActive: z.boolean().optional(), agentCellIds: z.array(z.string()).optional() }).parse(request.body);
+    const input = z.object({ firstName: z.string().min(1).optional(), lastName: z.string().min(1).optional(), email: z.string().email().optional(), role: z.enum(["ADMIN", "USER", "AGENT"]).optional(), cellId: z.string().nullable().optional(), isActive: z.boolean().optional(), agentCellIds: z.array(z.string()).optional(), newPassword: z.string().min(12).max(128).optional(), confirmNewPassword: z.string().max(128).optional() }).superRefine((data, context) => {
+      if (data.newPassword && data.newPassword !== data.confirmNewPassword) context.addIssue({ code: "custom", path: ["confirmNewPassword"], message: "La confirmation du mot de passe ne correspond pas" });
+      if (!data.newPassword && data.confirmNewPassword) context.addIssue({ code: "custom", path: ["newPassword"], message: "Saisissez le nouveau mot de passe" });
+    }).parse(request.body);
+    const newPasswordHash = input.newPassword ? await argon2.hash(input.newPassword, { type: argon2.argon2id }) : undefined;
     const result = await prisma.$transaction(async (tx) => {
       const current = await tx.user.findUnique({ where: { id } });
       if (!current) return { error: "Utilisateur introuvable", status: 404 } as const;
@@ -269,8 +293,8 @@ export async function buildServer() {
         if (assignments === 0) return { error: "Un agent doit etre autorise sur au moins une cellule", status: 400 } as const;
       }
       if ((input.role ?? current.role) === "AGENT" && input.agentCellIds?.length === 0) return { error: "Un agent doit etre autorise sur au moins une cellule", status: 400 } as const;
-      const { agentCellIds, ...changes } = input;
-      const user = await tx.user.update({ where: { id }, data: { ...changes, ...(changes.email ? { email: changes.email.toLowerCase() } : {}) } });
+      const { agentCellIds, newPassword: _newPassword, confirmNewPassword: _confirmNewPassword, ...profileChanges } = input;
+      const user = await tx.user.update({ where: { id }, data: { ...profileChanges, ...(profileChanges.email ? { email: profileChanges.email.toLowerCase() } : {}), ...(newPasswordHash ? { passwordHash: newPasswordHash, sessionVersion: { increment: 1 } } : {}) } });
       if (agentCellIds) {
         await tx.agentCell.deleteMany({ where: { agentId: id } });
         if (agentCellIds.length && (input.role ?? current.role) === "AGENT") await tx.agentCell.createMany({ data: agentCellIds.map((cellId) => ({ agentId: id, cellId })) });
