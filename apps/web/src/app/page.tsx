@@ -18,6 +18,7 @@ import {
   Clock3,
   FilePlus2,
   Filter,
+  Pencil,
   Eye,
   EyeOff,
   LayoutDashboard,
@@ -36,6 +37,7 @@ import {
 } from "lucide-react";
 import {
   CreateTicketSchema,
+  UpdateTicketSchema,
   type Role,
   type TicketStatus,
 } from "@ohmflow/shared";
@@ -62,7 +64,7 @@ type Ticket = {
   cell: { name: string; service: { name: string } };
   categoryId: string | null;
   category: { id: string; name: string } | null;
-  creator: { firstName: string; lastName: string };
+  creator: { id: string; firstName: string; lastName: string };
   assignee?: { id: string; firstName: string; lastName: string } | null;
 };
 type Metrics = {
@@ -167,6 +169,15 @@ export default function Home() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [recent, setRecent] = useState<Ticket[]>([]);
   const [detail, setDetail] = useState<TicketDetail | null>(null);
+  const [ticketEditMode, setTicketEditMode] = useState(false);
+  const [ticketEditOptionsLoading, setTicketEditOptionsLoading] = useState(false);
+  const [ticketEditForm, setTicketEditForm] = useState({
+    title: "",
+    description: "",
+    cellId: "",
+    categoryId: "",
+    version: 1,
+  });
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [page, setPage] = useState(1);
@@ -348,10 +359,62 @@ export default function Home() {
     try {
       const data = await api<{ ticket: TicketDetail }>(`/tickets/${ticket.id}`);
       setDetail(data.ticket);
+      setTicketEditMode(false);
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "Impossible de charger le ticket",
       );
+    }
+  }
+  async function beginTicketEdit() {
+    if (!detail) return;
+    setTicketEditMode(true);
+    setTicketEditOptionsLoading(true);
+    setError("");
+    setTicketEditForm({
+      title: detail.title,
+      description: detail.description,
+      cellId: detail.cellId,
+      categoryId: detail.categoryId ?? "",
+      version: detail.version,
+    });
+    try {
+      const [cellData, categoryData] = await Promise.all([
+        api<{ items: typeof ticketCells }>("/cells"),
+        api<{ items: typeof ticketCategories }>("/ticket-categories"),
+      ]);
+      setTicketCells(cellData.items);
+      setTicketCategories(categoryData.items);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chargement des options impossible");
+    } finally {
+      setTicketEditOptionsLoading(false);
+    }
+  }
+  async function saveTicketEdit(event: React.FormEvent) {
+    event.preventDefault();
+    if (!detail) return;
+    const parsed = UpdateTicketSchema.safeParse(ticketEditForm);
+    if (!parsed.success) {
+      setError("Vérifiez l’objet, la description, la cellule et la catégorie du ticket.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      await api(`/tickets/${detail.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(parsed.data),
+      });
+      const refreshed = await api<{ ticket: TicketDetail }>(`/tickets/${detail.id}`);
+      setDetail(refreshed.ticket);
+      setTicketEditMode(false);
+      setSuccess("Votre ticket a été modifié.");
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Modification du ticket impossible");
+    } finally {
+      setBusy(false);
     }
   }
   async function createTicket(values: z.infer<typeof CreateTicketSchema>) {
@@ -626,6 +689,12 @@ export default function Home() {
           ),
       )
     : [];
+  const ticketCanBeEdited = Boolean(
+    user.role === "USER" &&
+      detail &&
+      detail.creator.id === user.id &&
+      ["OPEN", "IN_PROGRESS", "WAITING"].includes(detail.status),
+  );
   const metricCards =
     user.role === "USER"
       ? [
@@ -1180,6 +1249,15 @@ export default function Home() {
                   </p>
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
+                  {ticketCanBeEdited && !ticketEditMode && (
+                    <button
+                      className="button button-secondary"
+                      onClick={() => void beginTicketEdit()}
+                    >
+                      <Pencil />
+                      Modifier mon ticket
+                    </button>
+                  )}
                   <button
                     className="button button-secondary"
                     onClick={() => {
@@ -1216,9 +1294,109 @@ export default function Home() {
                       </div>
                       <Status status={detail.status} />
                     </div>
-                    <div className="ticket-description">
-                      {detail.description}
-                    </div>
+                    {ticketEditMode ? (
+                      <form onSubmit={saveTicketEdit} className="form-panel">
+                        <div className="form-grid">
+                          <div className="field full">
+                            <label htmlFor="edit-ticket-title">Objet</label>
+                            <input
+                              id="edit-ticket-title"
+                              className="control"
+                              minLength={3}
+                              maxLength={160}
+                              required
+                              value={ticketEditForm.title}
+                              onChange={(event) =>
+                                setTicketEditForm({
+                                  ...ticketEditForm,
+                                  title: event.target.value,
+                                })
+                              }
+                            />
+                          </div>
+                          <div className="field full">
+                            <label htmlFor="edit-ticket-description">Description</label>
+                            <textarea
+                              id="edit-ticket-description"
+                              className="control"
+                              minLength={10}
+                              maxLength={10000}
+                              required
+                              value={ticketEditForm.description}
+                              onChange={(event) =>
+                                setTicketEditForm({
+                                  ...ticketEditForm,
+                                  description: event.target.value,
+                                })
+                              }
+                            />
+                          </div>
+                          <div className="field">
+                            <label htmlFor="edit-ticket-cell">Cellule concernée</label>
+                            <select
+                              id="edit-ticket-cell"
+                              className="control"
+                              required
+                              value={ticketEditForm.cellId}
+                              disabled={ticketEditOptionsLoading}
+                              onChange={(event) =>
+                                setTicketEditForm({
+                                  ...ticketEditForm,
+                                  cellId: event.target.value,
+                                })
+                              }
+                            >
+                              <option value="">Choisir une cellule</option>
+                              {ticketCells.map((cell) => (
+                                <option key={cell.id} value={cell.id}>
+                                  {cell.service.name} · {cell.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="field">
+                            <label htmlFor="edit-ticket-category">Catégorie</label>
+                            <select
+                              id="edit-ticket-category"
+                              className="control"
+                              required
+                              value={ticketEditForm.categoryId}
+                              disabled={ticketEditOptionsLoading}
+                              onChange={(event) =>
+                                setTicketEditForm({
+                                  ...ticketEditForm,
+                                  categoryId: event.target.value,
+                                })
+                              }
+                            >
+                              <option value="">Choisir une catégorie</option>
+                              {ticketCategories.map((category) => (
+                                <option key={category.id} value={category.id}>
+                                  {category.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                        <div className="form-actions">
+                          <button
+                            type="button"
+                            className="button button-secondary"
+                            onClick={() => setTicketEditMode(false)}
+                          >
+                            Annuler
+                          </button>
+                          <button
+                            className="button button-primary"
+                            disabled={busy || ticketEditOptionsLoading}
+                          >
+                            {busy ? "Enregistrement…" : "Enregistrer"}
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <div className="ticket-description">{detail.description}</div>
+                    )}
                   </section>
                   <section className="panel" style={{ marginTop: 15 }}>
                     <div className="panel-head">

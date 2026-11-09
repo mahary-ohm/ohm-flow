@@ -9,7 +9,7 @@ import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import argon2 from "argon2";
 import { z, ZodError } from "zod";
-import { ChangeStatusSchema, CommentSchema, CreateTicketCategorySchema, CreateTicketSchema, TicketQuerySchema, UpdateTicketCategorySchema, type Role, type TicketStatus } from "@ohmflow/shared";
+import { ChangeStatusSchema, CommentSchema, CreateTicketCategorySchema, CreateTicketSchema, TicketQuerySchema, UpdateTicketCategorySchema, UpdateTicketSchema, type Role, type TicketStatus } from "@ohmflow/shared";
 import { prisma } from "./db.js";
 
 declare module "@fastify/session" {
@@ -164,6 +164,30 @@ export async function buildServer() {
       return ticket;
     });
     return reply.code(201).send({ ticket: created });
+  });
+
+  app.patch("/api/v1/tickets/:id", { preHandler: requireRole("USER") }, async (request, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(request.params);
+    const input = UpdateTicketSchema.parse(request.body);
+    const user = request.authUser!;
+    const current = await prisma.ticket.findUnique({ where: { id } });
+    if (!current || current.creatorId !== user.id) return reply.code(404).send({ error: "Ticket introuvable" });
+    if (["RESOLVED", "CLOSED"].includes(current.status)) return reply.code(409).send({ error: "Un ticket résolu ou clôturé ne peut plus être modifié" });
+    if (current.version !== input.version) return reply.code(409).send({ error: "Le ticket a été modifié. Rechargez la page." });
+
+    const [activeCell, activeCategory] = await Promise.all([
+      prisma.cell.findFirst({ where: { id: input.cellId, isActive: true, service: { isActive: true } } }),
+      prisma.ticketCategory.findFirst({ where: { id: input.categoryId, isActive: true } }),
+    ]);
+    if (!activeCell) return reply.code(400).send({ error: "La cellule choisie est introuvable ou inactive" });
+    if (!activeCategory) return reply.code(400).send({ error: "La catégorie choisie est introuvable ou inactive" });
+
+    const updated = await prisma.ticket.updateMany({
+      where: { id, creatorId: user.id, status: { in: ["OPEN", "IN_PROGRESS", "WAITING"] }, version: input.version },
+      data: { title: input.title, description: input.description, cellId: input.cellId, categoryId: input.categoryId, version: { increment: 1 } },
+    });
+    if (!updated.count) return reply.code(409).send({ error: "Le ticket a changé d’état ou a été modifié simultanément" });
+    return { ticket: await prisma.ticket.findUnique({ where: { id }, include: { cell: { include: { service: true } }, category: true, creator: safeUser, assignee: safeUser } }) };
   });
 
   app.get("/api/v1/tickets/:id", { preHandler: requireUser }, async (request, reply) => {
