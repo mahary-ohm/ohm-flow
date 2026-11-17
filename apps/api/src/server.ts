@@ -49,11 +49,20 @@ export async function buildServer() {
     methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   });
   await app.register(cookie);
+  const sessionLifetimeMs = 30 * 24 * 60 * 60 * 1000;
   await app.register(session, {
     secret: sessionSecret,
     cookieName: "ohmflow.sid",
-    cookie: { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 8 * 60 * 60 * 1000 },
+    cookie: {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: sessionLifetimeMs,
+      expires: new Date(Date.now() + sessionLifetimeMs),
+    },
     saveUninitialized: false,
+    rolling: true,
   });
   await app.register(rateLimit, { max: 100, timeWindow: "1 minute" });
   await app.register(swagger, { openapi: { info: { title: "OhmFlow API", version: "1.0.0" } } });
@@ -261,11 +270,16 @@ export async function buildServer() {
     if (!(await canAccessTicket(request, id))) return reply.code(404).send({ error: "Ticket introuvable" });
     return { items: await prisma.ticketComment.findMany({ where: { ticketId: id }, orderBy: { createdAt: "asc" }, include: { author: safeUser } }) };
   });
-  app.post("/api/v1/tickets/:id/comments", { preHandler: requireRole("ADMIN", "AGENT") }, async (request, reply) => {
+  app.post("/api/v1/tickets/:id/comments", { preHandler: requireRole("ADMIN", "AGENT", "USER") }, async (request, reply) => {
     const { id } = z.object({ id: z.string() }).parse(request.params);
     const { content } = CommentSchema.parse(request.body);
+    const user = request.authUser!;
     if (!(await canAccessTicket(request, id))) return reply.code(404).send({ error: "Ticket introuvable" });
-    return reply.code(201).send({ comment: await prisma.ticketComment.create({ data: { ticketId: id, authorId: request.authUser!.id, content }, include: { author: safeUser } }) });
+    if (user.role === "USER") {
+      const ticket = await prisma.ticket.findUnique({ where: { id }, select: { creatorId: true } });
+      if (!ticket || ticket.creatorId !== user.id) return reply.code(403).send({ error: "Seul le créateur du ticket peut commenter" });
+    }
+    return reply.code(201).send({ comment: await prisma.ticketComment.create({ data: { ticketId: id, authorId: user.id, content }, include: { author: safeUser } }) });
   });
 
   app.get("/api/v1/services", { preHandler: requireUser }, async (request) => ({ items: await prisma.service.findMany({ where: request.authUser?.role === "ADMIN" ? {} : { isActive: true }, orderBy: { name: "asc" }, include: { cells: { where: request.authUser?.role === "ADMIN" ? {} : { isActive: true } } } }) }));
