@@ -2,7 +2,7 @@
 
 import { type Dispatch, type FormEvent, type ReactElement, type SetStateAction } from "react";
 import { ArrowLeft, Check, Clock3, MessageSquareText, Pencil, Settings2 } from "lucide-react";
-import type { TicketStatus } from "@ohmflow/shared";
+import { statusTransitions, type TicketStatus } from "@ohmflow/shared";
 import { DetailValue } from "./ohmflow-admin";
 import type { TicketDetail, User, View } from "./ohmflow-types";
 
@@ -65,12 +65,12 @@ export function TicketDetailView(props: TicketDetailViewProps) {
               <div className="page-head">
                 <div>
                   <div className="eyebrow">
-                    {detail.cell.service.name.toUpperCase()} ┬À{" "}
+                    {detail.cell.service.name.toUpperCase()} ·{" "}
                     {detail.cell.name.toUpperCase()}
                   </div>
                   <h1 className="page-title">{detail.title}</h1>
                   <p className="page-subtitle">
-                    {detail.reference} ┬À Cr├®├® le {dateShort(detail.createdAt)}
+                    {detail.reference} · Créé le {dateShort(detail.createdAt)}
                   </p>
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
@@ -157,7 +157,7 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                             />
                           </div>
                           <div className="field">
-                            <label htmlFor="edit-ticket-cell">Cellule concern├®e</label>
+                            <label htmlFor="edit-ticket-cell">Cellule concernée</label>
                             <select
                               id="edit-ticket-cell"
                               className="control"
@@ -174,13 +174,13 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                               <option value="">Choisir une cellule</option>
                               {ticketCells.map((cell) => (
                                 <option key={cell.id} value={cell.id}>
-                                  {cell.service.name} ┬À {cell.name}
+                                  {cell.service.name} · {cell.name}
                                 </option>
                               ))}
                             </select>
                           </div>
                           <div className="field">
-                            <label htmlFor="edit-ticket-category">Cat├®gorie</label>
+                            <label htmlFor="edit-ticket-category">Catégorie</label>
                             <select
                               id="edit-ticket-category"
                               className="control"
@@ -194,7 +194,7 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                                 })
                               }
                             >
-                              <option value="">Choisir une cat├®gorie</option>
+                              <option value="">Choisir une catégorie</option>
                               {ticketCategories.map((category) => (
                                 <option key={category.id} value={category.id}>
                                   {category.name}
@@ -215,7 +215,7 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                             className="button button-primary"
                             disabled={busy || ticketEditOptionsLoading}
                           >
-                            {busy ? "EnregistrementÔÇª" : "Enregistrer"}
+                            {busy ? "Enregistrement…" : "Enregistrer"}
                           </button>
                         </div>
                       </form>
@@ -242,8 +242,8 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                               {entry.actor.firstName} {entry.actor.lastName}
                             </strong>{" "}
                             {entry.from
-                              ? `a chang├® le statut en ${labels[entry.to]}`
-                              : "a cr├®├® le ticket"}
+                              ? `a changé le statut en ${labels[entry.to]}`
+                              : "a créé le ticket"}
                             {entry.comment && (
                               <div className="muted">{entry.comment}</div>
                             )}
@@ -266,7 +266,7 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                             <strong>
                               {entry.author.firstName} {entry.author.lastName}
                             </strong>{" "}
-                            a comment├®
+                            a commenté
                             <div style={{ marginTop: 4 }}>{entry.content}</div>
                             <div className="activity-meta">
                               {new Intl.DateTimeFormat("fr-FR", {
@@ -283,7 +283,7 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                         <textarea
                           className="control"
                           aria-label="Ajouter un commentaire"
-                          placeholder="Ajouter une note de traitementÔÇª"
+                          placeholder="Ajouter une note de traitement…"
                           value={comment}
                           onChange={(e) => setComment(e.target.value)}
                         />
@@ -302,7 +302,7 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                 <aside>
                   <section className="panel">
                     <div className="panel-head">
-                      <h2 className="panel-title">D├®tails</h2>
+                      <h2 className="panel-title">Détails</h2>
                       <Settings2 size={16} color="#78857c" />
                     </div>
                     <div className="detail-meta">
@@ -310,9 +310,9 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                         label="Statut"
                         value={<Status status={detail.status} />}
                       />
-                      <DetailValue label="R├®f├®rence" value={detail.reference} />
+                      <DetailValue label="Référence" value={detail.reference} />
                       <DetailValue
-                        label="Cr├®ateur"
+                        label="Créateur"
                         value={`${detail.creator.firstName} ${detail.creator.lastName}`}
                       />
                       <DetailValue
@@ -320,20 +320,20 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                         value={
                           detail.assignee
                             ? `${detail.assignee.firstName} ${detail.assignee.lastName}`
-                            : "Non attribu├®"
+                            : "Non attribué"
                         }
                       />
                       <DetailValue label="Cellule" value={detail.cell.name} />
                       <DetailValue
-                        label="Cat├®gorie"
-                        value={detail.category?.name ?? "Sans cat├®gorie"}
+                        label="Catégorie"
+                        value={detail.category?.name ?? "Sans catégorie"}
                       />
                       <DetailValue
                         label="Service"
                         value={detail.cell.service.name}
                       />
                       <DetailValue
-                        label="Derni├¿re mise ├á jour"
+                        label="Dernière mise à jour"
                         value={dateShort(detail.updatedAt)}
                       />
                       {user.role === "ADMIN" && (
@@ -342,7 +342,7 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                         >
                           <label className="field">
                             <span className="detail-label">
-                              AFFECTER ├Ç UN AGENT
+                              AFFECTER À UN AGENT
                             </span>
                             <select
                               className="control"
@@ -352,8 +352,8 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                             >
                               <option value="">
                                 {agentsLoading
-                                  ? "Chargement des agentsÔÇª"
-                                  : "Choisir un agent autoris├®ÔÇª"}
+                                  ? "Chargement des agents…"
+                                  : "Choisir un agent autorisé…"}
                               </option>
                               {eligibleAgents.map((agent) => (
                                 <option key={agent.id} value={agent.id}>
@@ -369,8 +369,8 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                             <span className="field-error">{agentsLoadError}</span>
                           ) : !agentsLoading && eligibleAgents.length === 0 ? (
                             <span className="activity-meta">
-                              Aucun agent actif nÔÇÖest autoris├® pour la cellule {detail.cell.name}.
-                              V├®rifiez les cellules de traitement dans la fiche utilisateur de lÔÇÖagent.
+                              Aucun agent actif n’est autorisé pour la cellule {detail.cell.name}.
+                              Vérifiez les cellules de traitement dans la fiche utilisateur de l’agent.
                             </span>
                           ) : null}
                           <button
@@ -378,7 +378,7 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                             disabled={busy || !selectedAgent}
                             onClick={assignTicket}
                           >
-                            Confirmer lÔÇÖaffectation
+                            Confirmer l’affectation
                           </button>
                         </div>
                       )}
@@ -389,7 +389,7 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                           >
                             <label className="field">
                               <span className="detail-label">
-                                FAIRE ├ëVOLUER LE TICKET
+                                FAIRE ÉVOLUER LE TICKET
                               </span>
                               <select
                                 className="control"
@@ -402,7 +402,7 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                                   )
                                 }
                               >
-                                <option value="">Choisir une actionÔÇª</option>
+                                <option value="">Choisir une action…</option>
                                 {(detail.status === "IN_PROGRESS"
                                   ? ["WAITING", "RESOLVED"]
                                   : detail.status === "WAITING"
@@ -440,15 +440,8 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                                 )
                               }
                             >
-                              <option value="">Choisir une actionÔÇª</option>
-                              {(detail.status === "OPEN"
-                                ? ["IN_PROGRESS"]
-                                : detail.status === "IN_PROGRESS"
-                                  ? ["WAITING", "RESOLVED", "OPEN"]
-                                  : detail.status === "WAITING"
-                                    ? ["IN_PROGRESS", "RESOLVED", "OPEN"]
-                                    : ["CLOSED", "IN_PROGRESS"]
-                              ).map((status) => (
+                              <option value="">Choisir une action…</option>
+                              {statusTransitions[detail.status].map((status) => (
                                 <option key={status} value={status}>
                                   {labels[status as TicketStatus]}
                                 </option>

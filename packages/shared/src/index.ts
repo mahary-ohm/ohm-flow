@@ -2,9 +2,17 @@ import { z } from "zod";
 
 export const RoleSchema = z.enum(["ADMIN", "USER", "AGENT"]);
 export const TicketStatusSchema = z.enum(["OPEN", "IN_PROGRESS", "WAITING", "RESOLVED", "CLOSED"]);
+export const statusTransitions: Record<z.infer<typeof TicketStatusSchema>, z.infer<typeof TicketStatusSchema>[]> = {
+  OPEN: ["IN_PROGRESS"],
+  IN_PROGRESS: ["WAITING", "RESOLVED", "OPEN"],
+  WAITING: ["IN_PROGRESS", "RESOLVED", "OPEN"],
+  RESOLVED: ["CLOSED", "IN_PROGRESS"],
+  CLOSED: ["IN_PROGRESS"],
+};
 export const TicketQuerySchema = z.object({
   q: z.string().trim().max(120).optional(),
   status: TicketStatusSchema.optional(),
+  available: z.enum(["true", "false"]).transform((value) => value === "true").optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });

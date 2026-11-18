@@ -68,7 +68,7 @@ export function WorkspaceViews(props: WorkspaceViewsProps) {
                     <span style={{ color: "var(--green)" }}>.</span>
                   </h1>
                   <p className="page-subtitle">
-                    Voici ce qui se passe dans votre espace aujourdÔÇÖhui.
+                    Voici ce qui se passe dans votre espace aujourd’hui.
                   </p>
                 </div>
                 {user.role === "USER" && (
@@ -104,10 +104,10 @@ export function WorkspaceViews(props: WorkspaceViewsProps) {
                   <div className="panel-head">
                     <div>
                       <h2 className="panel-title">
-                        Tickets r├®cemment mis ├á jour
+                        Tickets récemment mis à jour
                       </h2>
                       <div className="panel-note">
-                        Les derni├¿res ├®volutions dans votre p├®rim├¿tre
+                        Les dernières évolutions dans votre périmètre
                       </div>
                     </div>
                     <button
@@ -128,8 +128,8 @@ export function WorkspaceViews(props: WorkspaceViewsProps) {
                 <section className="panel">
                   <div className="panel-head">
                     <div>
-                      <h2 className="panel-title">├Ç suivre</h2>
-                      <div className="panel-note">Points dÔÇÖattention</div>
+                      <h2 className="panel-title">À suivre</h2>
+                      <div className="panel-note">Points d’attention</div>
                     </div>
                     <MoreHorizontal size={17} color="#78857c" />
                   </div>
@@ -143,7 +143,7 @@ export function WorkspaceViews(props: WorkspaceViewsProps) {
                             attendent une prise en charge
                           </div>
                           <div className="activity-meta">
-                            Dans votre p├®rim├¿tre de traitement
+                            Dans votre périmètre de traitement
                           </div>
                         </div>
                       </div>
@@ -170,10 +170,10 @@ export function WorkspaceViews(props: WorkspaceViewsProps) {
                       />
                       <div>
                         <div className="activity-text">
-                          Votre espace est ├á jour
+                          Votre espace est à jour
                         </div>
                         <div className="activity-meta">
-                          Donn├®es synchronis├®es ├á lÔÇÖinstant
+                          Données synchronisées à l’instant
                         </div>
                       </div>
                     </div>
@@ -189,7 +189,7 @@ export function WorkspaceViews(props: WorkspaceViewsProps) {
                   <div className="eyebrow">SUIVI DES DEMANDES</div>
                   <h1 className="page-title">Tous les tickets</h1>
                   <p className="page-subtitle">
-                    {total} demande{total !== 1 ? "s" : ""} dans votre p├®rim├¿tre
+                    {total} demande{total !== 1 ? "s" : ""} dans votre périmètre
                   </p>
                 </div>
                 {user.role === "USER" && (
@@ -228,7 +228,7 @@ export function WorkspaceViews(props: WorkspaceViewsProps) {
                   <div className="eyebrow">CENTRE DE TRAITEMENT</div>
                   <h1 className="page-title">File de traitement</h1>
                   <p className="page-subtitle">
-                    Demandes ouvertes dans vos cellules autoris├®es.
+                    Demandes ouvertes dans vos cellules autorisées.
                   </p>
                 </div>
               </div>
@@ -255,10 +255,10 @@ export function WorkspaceViews(props: WorkspaceViewsProps) {
             <>
               <div className="page-head">
                 <div>
-                  <div className="eyebrow">CR├ëATION DE TICKET</div>
+                  <div className="eyebrow">CRÉATION DE TICKET</div>
                   <h1 className="page-title">Nouvelle demande</h1>
                   <p className="page-subtitle">
-                    D├®crivez votre besoin, il sera transmis ├á votre cellule.
+                    Décrivez votre besoin, il sera transmis à votre cellule.
                   </p>
                 </div>
                 <button
@@ -277,7 +277,7 @@ export function WorkspaceViews(props: WorkspaceViewsProps) {
                       <input
                         id="title"
                         className="control"
-                        placeholder="Ex. Acc├¿s ├á lÔÇÖespace client indisponible"
+                        placeholder="Ex. Accès à l’espace client indisponible"
                         {...ticketForm.register("title")}
                       />
                       {ticketForm.formState.errors.title && (
@@ -291,7 +291,7 @@ export function WorkspaceViews(props: WorkspaceViewsProps) {
                       <textarea
                         id="description"
                         className="control"
-                        placeholder="D├®crivez le contexte, les ├®tapes suivies et le r├®sultat attenduÔÇª"
+                        placeholder="Décrivez le contexte, les étapes suivies et le résultat attendu…"
                         {...ticketForm.register("description")}
                       />
                       {ticketForm.formState.errors.description && (
@@ -301,7 +301,7 @@ export function WorkspaceViews(props: WorkspaceViewsProps) {
                       )}
                     </div>
                     <div className="field">
-                      <label htmlFor="ticket-category">Cat├®gorie</label>
+                      <label htmlFor="ticket-category">Catégorie</label>
                       <select
                         id="ticket-category"
                         className="control"
@@ -310,7 +310,7 @@ export function WorkspaceViews(props: WorkspaceViewsProps) {
                         {...ticketForm.register("categoryId")}
                       >
                         <option value="" disabled>
-                          Choisir une cat├®gorie
+                          Choisir une catégorie
                         </option>
                         {ticketCategories.map((category) => (
                           <option key={category.id} value={category.id}>
@@ -325,12 +325,12 @@ export function WorkspaceViews(props: WorkspaceViewsProps) {
                       )}
                       {!ticketCategories.length && (
                         <span className="activity-meta">
-                          Aucune cat├®gorie active. Contactez un administrateur.
+                          Aucune catégorie active. Contactez un administrateur.
                         </span>
                       )}
                     </div>
                     <div className="field">
-                      <label htmlFor="ticket-cell">Cellule concern├®e</label>
+                      <label htmlFor="ticket-cell">Cellule concernée</label>
                       <select
                         id="ticket-cell"
                         className="control"
@@ -343,7 +343,7 @@ export function WorkspaceViews(props: WorkspaceViewsProps) {
                         </option>
                         {ticketCells.map((cell) => (
                           <option key={cell.id} value={cell.id}>
-                            {cell.service.name} ┬À {cell.name}
+                            {cell.service.name} · {cell.name}
                           </option>
                         ))}
                       </select>
@@ -383,7 +383,7 @@ export function WorkspaceViews(props: WorkspaceViewsProps) {
                     </button>
                     <button className="button button-primary" disabled={busy}>
                       <FilePlus2 />
-                      {busy ? "EnvoiÔÇª" : "Cr├®er la demande"}
+                      {busy ? "Envoi…" : "Créer la demande"}
                     </button>
                   </div>
                 </form>
@@ -404,7 +404,7 @@ export function WorkspaceViews(props: WorkspaceViewsProps) {
                   <div className="eyebrow">VOTRE COMPTE</div>
                   <h1 className="page-title">Mon profil</h1>
                   <p className="page-subtitle">
-                    Informations associ├®es ├á votre compte OhmFlow.
+                    Informations associées à votre compte OhmFlow.
                   </p>
                 </div>
               </div>
@@ -439,11 +439,11 @@ export function WorkspaceViews(props: WorkspaceViewsProps) {
                 </div>
                 <div className="form-grid" style={{ marginTop: 20 }}>
                   <DetailValue label="Adresse e-mail" value={user.email} />
-                  <DetailValue label="R├┤le" value={roleNames[user.role]} />
+                  <DetailValue label="Rôle" value={roleNames[user.role]} />
                   <DetailValue label="Identifiant" value={user.id} />
                   <DetailValue
                     label="Cellule"
-                    value={user.cellId ?? "Acc├¿s transversal"}
+                    value={user.cellId ?? "Accès transversal"}
                   />
                 </div>
               </section>

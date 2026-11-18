@@ -9,8 +9,10 @@ import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import argon2 from "argon2";
 import { z, ZodError } from "zod";
-import { ChangeStatusSchema, CommentSchema, CreateTicketCategorySchema, CreateTicketSchema, TicketQuerySchema, UpdateTicketCategorySchema, UpdateTicketSchema, type Role, type TicketStatus } from "@ohmflow/shared";
+import { Prisma } from "@prisma/client";
+import { ChangeStatusSchema, CommentSchema, CreateTicketCategorySchema, CreateTicketSchema, TicketQuerySchema, UpdateTicketCategorySchema, UpdateTicketSchema, statusTransitions, type Role } from "@ohmflow/shared";
 import { prisma } from "./db.js";
+import { buildTicketListWhere, ticketVisibilityScope } from "./ticket-scope.js";
 
 declare module "@fastify/session" {
   interface FastifySessionObject {
@@ -25,16 +27,18 @@ declare module "fastify" {
   interface FastifyRequest { authUser: AuthUser | null }
 }
 
-const statusTransitions: Record<TicketStatus, TicketStatus[]> = {
-  OPEN: ["IN_PROGRESS"],
-  IN_PROGRESS: ["WAITING", "RESOLVED", "OPEN"],
-  WAITING: ["IN_PROGRESS", "RESOLVED", "OPEN"],
-  RESOLVED: ["CLOSED", "IN_PROGRESS"],
-  CLOSED: ["IN_PROGRESS"],
+const prismaErrorStatus: Record<string, { status: number; message: string }> = {
+  P2002: { status: 409, message: "Une ressource avec cette valeur existe déjà" },
+  P2003: { status: 400, message: "Une référence fournie est introuvable" },
+  P2025: { status: 404, message: "Ressource introuvable" },
 };
 
 export async function buildServer() {
-  const app = Fastify({ logger: true, trustProxy: true });
+  // N'activer qu'en présence d'un reverse proxy de confiance : sinon X-Forwarded-For
+  // est falsifiable et contourne la limitation de débit de la connexion.
+  const app = Fastify({ logger: true, trustProxy: process.env.TRUST_PROXY === "true" });
+  // Hash factice pour que la vérification prenne le même temps quand l'e-mail n'existe pas.
+  const dummyPasswordHash = await argon2.hash("ohmflow-dummy-password", { type: argon2.argon2id });
   const sessionSecret = process.env.SESSION_SECRET;
   if (!sessionSecret || sessionSecret.length < 32) throw new Error("SESSION_SECRET doit contenir au moins 32 caracteres.");
   const webOrigins = (process.env.WEB_ORIGIN ?? "http://localhost:3000").split(",").map((origin) => origin.trim());
@@ -59,14 +63,15 @@ export async function buildServer() {
       sameSite: "lax",
       path: "/",
       maxAge: sessionLifetimeMs,
-      expires: new Date(Date.now() + sessionLifetimeMs),
     },
     saveUninitialized: false,
     rolling: true,
   });
   await app.register(rateLimit, { max: 100, timeWindow: "1 minute" });
-  await app.register(swagger, { openapi: { info: { title: "OhmFlow API", version: "1.0.0" } } });
-  await app.register(swaggerUi, { routePrefix: "/docs" });
+  if (process.env.NODE_ENV !== "production" || process.env.ENABLE_API_DOCS === "true") {
+    await app.register(swagger, { openapi: { info: { title: "OhmFlow API", version: "1.0.0" } } });
+    await app.register(swaggerUi, { routePrefix: "/docs" });
+  }
 
   app.decorateRequest("authUser", null);
   app.addHook("preHandler", async (request) => {
@@ -86,6 +91,10 @@ export async function buildServer() {
 
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof ZodError) return reply.code(400).send({ error: "Validation invalide", details: error.flatten() });
+    if (error instanceof Prisma.PrismaClientKnownRequestError && prismaErrorStatus[error.code]) {
+      const mapped = prismaErrorStatus[error.code];
+      return reply.code(mapped.status).send({ error: mapped.message });
+    }
     app.log.error(error);
     const statusCode = error instanceof Error && "statusCode" in error && typeof error.statusCode === "number" ? error.statusCode : 500;
     return reply.code(statusCode).send({ error: statusCode < 500 && error instanceof Error ? error.message : "Erreur interne du serveur" });
@@ -113,7 +122,8 @@ export async function buildServer() {
   app.post("/api/v1/auth/login", { config: { rateLimit: { max: 8, timeWindow: "15 minutes" } } }, async (request, reply) => {
     const input = z.object({ email: z.string().email(), password: z.string().min(1) }).parse(request.body);
     const user = await prisma.user.findUnique({ where: { email: input.email.toLowerCase() } });
-    if (!user || !user.isActive || !(await argon2.verify(user.passwordHash, input.password))) return reply.code(401).send({ error: "Adresse e-mail ou mot de passe incorrect" });
+    const passwordValid = await argon2.verify(user?.passwordHash ?? dummyPasswordHash, input.password);
+    if (!user || !user.isActive || !passwordValid) return reply.code(401).send({ error: "Adresse e-mail ou mot de passe incorrect" });
     await request.session.regenerate();
     request.session.userId = user.id;
     request.session.sessionVersion = user.sessionVersion;
@@ -128,7 +138,7 @@ export async function buildServer() {
 
   app.get("/api/v1/dashboard", { preHandler: requireUser }, async (request) => {
     const user = request.authUser!;
-    const scope = user.role === "ADMIN" ? {} : user.role === "USER" ? { OR: [{ cellId: user.cellId ?? "" }, { creatorId: user.id }] } : { OR: [{ cell: { agents: { some: { agentId: user.id } } } }, { assigneeId: user.id }] };
+    const scope = ticketVisibilityScope(user);
     const [total, open, inProgress, waiting, resolved, recent, unassigned, activeUsers] = await Promise.all([
       prisma.ticket.count({ where: scope }),
       prisma.ticket.count({ where: { ...scope, status: "OPEN" } }),
@@ -145,12 +155,7 @@ export async function buildServer() {
   app.get("/api/v1/tickets", { preHandler: requireUser }, async (request) => {
     const query = TicketQuerySchema.parse(request.query);
     const user = request.authUser!;
-    const scope = user.role === "ADMIN" ? {} : user.role === "USER" ? { OR: [{ cellId: user.cellId ?? "" }, { creatorId: user.id }] } : { OR: [{ cell: { agents: { some: { agentId: user.id } } } }, { assigneeId: user.id }] };
-    const where = {
-      ...scope,
-      ...(query.status ? { status: query.status } : {}),
-      ...(query.q ? { OR: [{ reference: { contains: query.q, mode: "insensitive" as const } }, { title: { contains: query.q, mode: "insensitive" as const } }] } : {}),
-    };
+    const where = buildTicketListWhere(user, query);
     const [items, total] = await Promise.all([
       prisma.ticket.findMany({ where, orderBy: { updatedAt: "desc" }, skip: (query.page - 1) * query.pageSize, take: query.pageSize, include: { cell: { include: { service: true } }, category: true, creator: safeUser, assignee: safeUser } }),
       prisma.ticket.count({ where }),
@@ -256,7 +261,7 @@ export async function buildServer() {
       if (ticket.version !== input.version) return { error: "Le ticket a ete modifie. Rechargez la page.", status: 409 } as const;
       if (user.role === "AGENT" && ticket.assigneeId !== user.id) return { error: "Seul l'agent responsable peut modifier le statut", status: 403 } as const;
       if (!statusTransitions[ticket.status].includes(input.status)) return { error: `Transition ${ticket.status} vers ${input.status} interdite`, status: 409 } as const;
-      const changed = await tx.ticket.updateMany({ where: { id, version: input.version }, data: { status: input.status, resolvedAt: input.status === "RESOLVED" ? new Date() : null, version: { increment: 1 } } });
+      const changed = await tx.ticket.updateMany({ where: { id, version: input.version }, data: { status: input.status, resolvedAt: input.status === "RESOLVED" ? new Date() : input.status === "CLOSED" ? ticket.resolvedAt : null, version: { increment: 1 } } });
       if (!changed.count) return { error: "Le ticket a ete modifie simultanement", status: 409 } as const;
       await tx.ticketStatusHistory.create({ data: { ticketId: id, actorId: user.id, from: ticket.status, to: input.status, comment: input.comment } });
       return { ticket: await tx.ticket.findUnique({ where: { id } }) } as const;
@@ -333,9 +338,11 @@ export async function buildServer() {
       if ((input.role ?? current.role) === "AGENT" && input.agentCellIds?.length === 0) return { error: "Un agent doit etre autorise sur au moins une cellule", status: 400 } as const;
       const { agentCellIds, newPassword: _newPassword, confirmNewPassword: _confirmNewPassword, ...profileChanges } = input;
       const user = await tx.user.update({ where: { id }, data: { ...profileChanges, ...(profileChanges.email ? { email: profileChanges.email.toLowerCase() } : {}), ...(newPasswordHash ? { passwordHash: newPasswordHash, sessionVersion: { increment: 1 } } : {}) } });
-      if (agentCellIds) {
+      const finalRole = input.role ?? current.role;
+      if (agentCellIds || finalRole !== "AGENT") {
+        // Un non-agent ne conserve aucune autorisation de cellule d'agent.
         await tx.agentCell.deleteMany({ where: { agentId: id } });
-        if (agentCellIds.length && (input.role ?? current.role) === "AGENT") await tx.agentCell.createMany({ data: agentCellIds.map((cellId) => ({ agentId: id, cellId })) });
+        if (agentCellIds?.length && finalRole === "AGENT") await tx.agentCell.createMany({ data: agentCellIds.map((cellId) => ({ agentId: id, cellId })) });
       }
       return { user: { id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role: user.role, isActive: user.isActive, cellId: user.cellId } } as const;
     });

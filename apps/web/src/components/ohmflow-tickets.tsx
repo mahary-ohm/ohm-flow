@@ -1,31 +1,8 @@
 import { ArrowLeft, ArrowRight, BriefcaseBusiness, Filter, Search } from "lucide-react";
 import { type ReactElement, type ReactNode } from "react";
-import { type Role, type TicketStatus } from "@ohmflow/shared";
-export type User = {
-  id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  role: Role;
-  cellId: string | null;
-};
-
-export type Ticket = {
-  id: string;
-  reference: string;
-  title: string;
-  description: string;
-  status: TicketStatus;
-  version: number;
-  createdAt: string;
-  updatedAt: string;
-  cellId: string;
-  cell: { name: string; service: { name: string } };
-  categoryId: string | null;
-  category: { id: string; name: string } | null;
-  creator: { id: string; firstName: string; lastName: string };
-  assignee?: { id: string; firstName: string; lastName: string } | null;
-};
+import { type TicketStatus } from "@ohmflow/shared";
+import type { Ticket, User } from "./ohmflow-types";
+export type { Ticket, User };
 
 export function Empty({ title, text }: { title: string; text?: string }) {
   return (
