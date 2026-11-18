@@ -396,6 +396,10 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                         value={detail.cell.service.name}
                       />
                       <DetailValue
+                        label="Résolu le"
+                        value={detail.resolvedAt ? dateShort(detail.resolvedAt) : "Non résolu"}
+                      />
+                      <DetailValue
                         label="Dernière mise à jour"
                         value={dateShort(detail.updatedAt)}
                       />

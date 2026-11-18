@@ -18,6 +18,8 @@ export type Ticket = {
   version: number;
   createdAt: string;
   updatedAt: string;
+  /** Fixée par l'API au passage en « Résolu », conservée à la clôture. */
+  resolvedAt: string | null;
   cellId: string;
   cell: { name: string; service: { name: string } };
   categoryId: string | null;
