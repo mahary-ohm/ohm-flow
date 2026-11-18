@@ -4,6 +4,8 @@ import { type TicketStatus } from "@ohmflow/shared";
 import type { Ticket, User } from "./ohmflow-types";
 export type { Ticket, User };
 
+const shortDate = new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "short", year: "numeric" });
+
 export function Empty({ title, text }: { title: string; text?: string }) {
   return (
     <div className="empty-state">
@@ -60,6 +62,7 @@ export function TicketTable({
             <th>Responsable</th>
             <th>Statut</th>
             <th>Mis à jour</th>
+            <th>Résolu le</th>
             <th />
           </tr>
         </thead>
@@ -95,7 +98,10 @@ export function TicketTable({
               <td>
                 <Status status={ticket.status} />
               </td>
-              <td>{new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(ticket.updatedAt))}</td>
+              <td>{shortDate.format(new Date(ticket.updatedAt))}</td>
+              <td className={ticket.resolvedAt ? undefined : "muted"}>
+                {ticket.resolvedAt ? shortDate.format(new Date(ticket.resolvedAt)) : "—"}
+              </td>
               <td>
                 <button
                   className="table-link"
