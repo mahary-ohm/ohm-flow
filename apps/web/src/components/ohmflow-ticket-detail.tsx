@@ -4,18 +4,9 @@ import { type Dispatch, type FormEvent, type ReactElement, type SetStateAction }
 import { ArrowLeft, Check, Clock3, MessageSquareText, Pencil, Settings2 } from "lucide-react";
 import { statusTransitions, type TicketStatus } from "@ohmflow/shared";
 import { DetailValue } from "./ohmflow-admin";
-import type { TicketDetail, User, View } from "./ohmflow-types";
+import type { TicketDetail, TicketEditForm, User, View } from "./ohmflow-types";
 
-export type TicketEditForm = {
-  title: string;
-  description: string;
-  cellId: string;
-  categoryId: string;
-  grdId: string;
-  pdlPce: string;
-  haulogyTicketNumber: string;
-  version: number;
-};
+export type { TicketEditForm };
 
 type AgentOption = { id: string; firstName: string; lastName: string };
 

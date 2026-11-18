@@ -1,68 +1,22 @@
 import { Plus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useReferenceList } from "../hooks/use-reference-list";
+import type { ApiClient } from "../lib/api";
 import { Empty } from "./ohmflow-tickets";
-export function AdminTicketCategories({ api }: { api: <T>(path: string, init?: RequestInit) => Promise<T> }) {
-  type TicketCategory = {
-    id: string;
-    name: string;
-    description: string | null;
-    isActive: boolean;
-  };
 
-  const [items, setItems] = useState<TicketCategory[]>([]);
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-  const [busy, setBusy] = useState(false);
+const messages = {
+  loadError: "Chargement des catégories impossible",
+  created: "La catégorie a été créée.",
+  createError: "Création de la catégorie impossible",
+  deactivated: "La catégorie a été désactivée.",
+  reactivated: "La catégorie a été réactivée.",
+  updateError: "Modification de la catégorie impossible",
+};
 
-  async function load() {
-    try {
-      const data = await api<{ items: TicketCategory[] }>('/ticket-categories');
-      setItems(data.items);
-      setError("");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Chargement des catégories impossible');
-    }
-  }
-
-  useEffect(() => { void load(); }, []);
-
-  async function createCategory(event: React.FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    setError("");
-    setSuccess("");
-    try {
-      await api('/ticket-categories', {
-        method: 'POST',
-        body: JSON.stringify({ name, description: description.trim() || undefined }),
-      });
-      setName("");
-      setDescription("");
-      setSuccess('La catégorie a été créée.');
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Création de la catégorie impossible');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function toggleCategory(category: TicketCategory) {
-    setError("");
-    setSuccess("");
-    try {
-      await api(`/ticket-categories/${category.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ isActive: !category.isActive }),
-      });
-      setSuccess(category.isActive ? 'La catégorie a été désactivée.' : 'La catégorie a été réactivée.');
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Modification de la catégorie impossible');
-    }
-  }
+export function AdminTicketCategories({ api }: { api: ApiClient }) {
+  const {
+    items, name, setName, description, setDescription, error, success, busy,
+    create: createCategory, toggle: toggleCategory,
+  } = useReferenceList(api, "/ticket-categories", messages);
 
   return (
     <>
