@@ -11,6 +11,9 @@ export type TicketEditForm = {
   description: string;
   cellId: string;
   categoryId: string;
+  grdId: string;
+  pdlPce: string;
+  haulogyTicketNumber: string;
   version: number;
 };
 
@@ -29,6 +32,7 @@ export type TicketDetailViewProps = {
   setTicketEditForm: Dispatch<SetStateAction<TicketEditForm>>;
   ticketCells: { id: string; name: string; service: { name: string } }[];
   ticketCategories: { id: string; name: string; description?: string | null }[];
+  ticketGrds: { id: string; name: string }[];
   saveTicketEdit: (event: FormEvent<HTMLFormElement>) => void | Promise<void>;
   beginTicketEdit: () => void | Promise<void>;
   claimTicket: () => void | Promise<void>;
@@ -52,7 +56,7 @@ export function TicketDetailView(props: TicketDetailViewProps) {
   const {
     user, detail, labels, Status, ticketCanBeEdited, ticketEditMode,
     setTicketEditMode, ticketEditOptionsLoading, ticketEditForm,
-    setTicketEditForm, ticketCells, ticketCategories, saveTicketEdit,
+    setTicketEditForm, ticketCells, ticketCategories, ticketGrds, saveTicketEdit,
     beginTicketEdit, claimTicket, setDetail, setView, busy, comment,
     setComment, addComment, agentsLoading, eligibleAgents, agentsLoadError,
     selectedAgent, setSelectedAgent, assignTicket, changeStatus, dateShort,
@@ -202,6 +206,59 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                               ))}
                             </select>
                           </div>
+                          <div className="field">
+                            <label htmlFor="edit-ticket-grd">GRD</label>
+                            <select
+                              id="edit-ticket-grd"
+                              className="control"
+                              required
+                              value={ticketEditForm.grdId}
+                              disabled={ticketEditOptionsLoading}
+                              onChange={(event) =>
+                                setTicketEditForm({
+                                  ...ticketEditForm,
+                                  grdId: event.target.value,
+                                })
+                              }
+                            >
+                              <option value="">Choisir un GRD</option>
+                              {ticketGrds.map((grd) => (
+                                <option key={grd.id} value={grd.id}>
+                                  {grd.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="field">
+                            <label htmlFor="edit-ticket-pdl-pce">PDL / PCE (facultatif)</label>
+                            <input
+                              id="edit-ticket-pdl-pce"
+                              className="control"
+                              maxLength={50}
+                              value={ticketEditForm.pdlPce}
+                              onChange={(event) =>
+                                setTicketEditForm({
+                                  ...ticketEditForm,
+                                  pdlPce: event.target.value,
+                                })
+                              }
+                            />
+                          </div>
+                          <div className="field">
+                            <label htmlFor="edit-ticket-haulogy">N° ticket Haulogy (facultatif)</label>
+                            <input
+                              id="edit-ticket-haulogy"
+                              className="control"
+                              maxLength={50}
+                              value={ticketEditForm.haulogyTicketNumber}
+                              onChange={(event) =>
+                                setTicketEditForm({
+                                  ...ticketEditForm,
+                                  haulogyTicketNumber: event.target.value,
+                                })
+                              }
+                            />
+                          </div>
                         </div>
                         <div className="form-actions">
                           <button
@@ -327,6 +384,12 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                       <DetailValue
                         label="Catégorie"
                         value={detail.category?.name ?? "Sans catégorie"}
+                      />
+                      <DetailValue label="GRD" value={detail.grd?.name ?? "Non renseigné"} />
+                      <DetailValue label="PDL / PCE" value={detail.pdlPce ?? "Non renseigné"} />
+                      <DetailValue
+                        label="N° ticket Haulogy"
+                        value={detail.haulogyTicketNumber ?? "Non renseigné"}
                       />
                       <DetailValue
                         label="Service"

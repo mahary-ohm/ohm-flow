@@ -22,6 +22,10 @@ export type Ticket = {
   cell: { name: string; service: { name: string } };
   categoryId: string | null;
   category: { id: string; name: string } | null;
+  grdId: string | null;
+  grd: { id: string; name: string } | null;
+  pdlPce: string | null;
+  haulogyTicketNumber: string | null;
   creator: { id: string; firstName: string; lastName: string };
   assignee?: { id: string; firstName: string; lastName: string } | null;
 };
@@ -56,4 +60,5 @@ export type View =
   | "users"
   | "services"
   | "categories"
+  | "grds"
   | "profile";

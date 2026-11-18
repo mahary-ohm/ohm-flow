@@ -5,7 +5,7 @@ import { type UseFormReturn } from "react-hook-form";
 import { z } from "zod";
 import { ArrowLeft, ArrowRight, FilePlus2, MoreHorizontal, Plus, type LucideIcon } from "lucide-react";
 import { CreateTicketSchema, type Role, type TicketStatus } from "@ohmflow/shared";
-import { AdminServices, AdminTicketCategories, AdminUsers, DetailValue, Pagination, TicketFilters, TicketTable } from "./ohmflow-admin";
+import { AdminGrds, AdminServices, AdminTicketCategories, AdminUsers, DetailValue, Pagination, TicketFilters, TicketTable } from "./ohmflow-admin";
 import type { Metrics, Ticket, TicketDetail, User, View } from "./ohmflow-types";
 
 export type WorkspaceViewsProps = {
@@ -26,11 +26,12 @@ export type WorkspaceViewsProps = {
   setPage: (page: number) => void;
   navClick: (view: View) => void;
   openTicket: (ticket: Ticket) => void | Promise<void>;
-  ticketForm: UseFormReturn<z.infer<typeof CreateTicketSchema>>;
-  createTicket: (values: z.infer<typeof CreateTicketSchema>) => void | Promise<void>;
+  ticketForm: UseFormReturn<z.input<typeof CreateTicketSchema>, unknown, z.output<typeof CreateTicketSchema>>;
+  createTicket: (values: z.output<typeof CreateTicketSchema>) => void | Promise<void>;
   busy: boolean;
   ticketCategories: { id: string; name: string; description?: string | null }[];
   ticketCells: { id: string; name: string; service: { name: string } }[];
+  ticketGrds: { id: string; name: string }[];
   userName: string;
   metricCards: { label: string; value: number; note: string; icon: LucideIcon }[];
   roleNames: Record<Role, string>;
@@ -45,7 +46,7 @@ export function WorkspaceViews(props: WorkspaceViewsProps) {
     api, user, view, detail, metrics, recent, tickets, total, shownTickets, page,
     search, setSearch, statusFilter, setStatusFilter, setPage, navClick,
     openTicket, ticketForm, createTicket, busy, ticketCategories, ticketCells,
-    userName, metricCards, roleNames, initials, labels, Status, Empty,
+    ticketGrds, userName, metricCards, roleNames, initials, labels, Status, Empty,
   } = props;
 
   return (
@@ -71,15 +72,13 @@ export function WorkspaceViews(props: WorkspaceViewsProps) {
                     Voici ce qui se passe dans votre espace aujourd’hui.
                   </p>
                 </div>
-                {user.role === "USER" && (
-                  <button
-                    className="button button-primary"
-                    onClick={() => navClick("new")}
-                  >
-                    <Plus />
-                    Nouvelle demande
-                  </button>
-                )}
+                <button
+                  className="button button-primary"
+                  onClick={() => navClick("new")}
+                >
+                  <Plus />
+                  Nouvelle demande
+                </button>
               </div>
               <div className="metric-grid">
                 {metricCards.map((item, index) => (
@@ -192,15 +191,13 @@ export function WorkspaceViews(props: WorkspaceViewsProps) {
                     {total} demande{total !== 1 ? "s" : ""} dans votre périmètre
                   </p>
                 </div>
-                {user.role === "USER" && (
-                  <button
-                    className="button button-primary"
-                    onClick={() => navClick("new")}
-                  >
-                    <Plus />
-                    Nouvelle demande
-                  </button>
-                )}
+                <button
+                  className="button button-primary"
+                  onClick={() => navClick("new")}
+                >
+                  <Plus />
+                  Nouvelle demande
+                </button>
               </div>
               <TicketFilters
                 search={search}
@@ -359,6 +356,65 @@ export function WorkspaceViews(props: WorkspaceViewsProps) {
                       )}
                     </div>
                     <div className="field">
+                      <label htmlFor="ticket-grd">GRD</label>
+                      <select
+                        id="ticket-grd"
+                        className="control"
+                        required
+                        defaultValue=""
+                        {...ticketForm.register("grdId")}
+                      >
+                        <option value="" disabled>
+                          Choisir un GRD
+                        </option>
+                        {ticketGrds.map((grd) => (
+                          <option key={grd.id} value={grd.id}>
+                            {grd.name}
+                          </option>
+                        ))}
+                      </select>
+                      {ticketForm.formState.errors.grdId && (
+                        <span className="field-error">
+                          {ticketForm.formState.errors.grdId.message}
+                        </span>
+                      )}
+                      {!ticketGrds.length && (
+                        <span className="activity-meta">
+                          Aucun GRD actif. Contactez un administrateur.
+                        </span>
+                      )}
+                    </div>
+                    <div className="field">
+                      <label htmlFor="ticket-pdl-pce">PDL / PCE (facultatif)</label>
+                      <input
+                        id="ticket-pdl-pce"
+                        className="control"
+                        maxLength={50}
+                        placeholder="Ex. 14 chiffres"
+                        {...ticketForm.register("pdlPce")}
+                      />
+                      {ticketForm.formState.errors.pdlPce && (
+                        <span className="field-error">
+                          {ticketForm.formState.errors.pdlPce.message}
+                        </span>
+                      )}
+                    </div>
+                    <div className="field">
+                      <label htmlFor="ticket-haulogy">N° ticket Haulogy (facultatif)</label>
+                      <input
+                        id="ticket-haulogy"
+                        className="control"
+                        maxLength={50}
+                        placeholder="Numéro du ticket dans Haulogy"
+                        {...ticketForm.register("haulogyTicketNumber")}
+                      />
+                      {ticketForm.formState.errors.haulogyTicketNumber && (
+                        <span className="field-error">
+                          {ticketForm.formState.errors.haulogyTicketNumber.message}
+                        </span>
+                      )}
+                    </div>
+                    <div className="field">
                       <label>Demandeur</label>
                       <div
                         className="control"
@@ -397,6 +453,7 @@ export function WorkspaceViews(props: WorkspaceViewsProps) {
           {!detail && view === "categories" && (
             <AdminTicketCategories api={api} />
           )}
+          {!detail && view === "grds" && <AdminGrds api={api} />}
           {!detail && view === "profile" && (
             <>
               <div className="page-head">

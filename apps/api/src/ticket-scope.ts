@@ -7,7 +7,7 @@ type ScopeUser = { id: string; role: Role; cellId: string | null };
 export function ticketVisibilityScope(user: ScopeUser): Prisma.TicketWhereInput {
   if (user.role === "ADMIN") return {};
   if (user.role === "USER") return { OR: [{ cellId: user.cellId ?? "" }, { creatorId: user.id }] };
-  return { OR: [{ cell: { agents: { some: { agentId: user.id } } } }, { assigneeId: user.id }] };
+  return { OR: [{ cell: { agents: { some: { agentId: user.id } } } }, { assigneeId: user.id }, { creatorId: user.id }] };
 }
 
 /**
@@ -25,6 +25,8 @@ export function buildTicketListWhere(
       OR: [
         { reference: { contains: query.q, mode: "insensitive" } },
         { title: { contains: query.q, mode: "insensitive" } },
+        { pdlPce: { contains: query.q, mode: "insensitive" } },
+        { haulogyTicketNumber: { contains: query.q, mode: "insensitive" } },
       ],
     });
   }

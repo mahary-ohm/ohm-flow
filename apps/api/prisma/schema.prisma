@@ -85,6 +85,19 @@ model TicketCategory {
   @@index([isActive, name])
 }
 
+/// Gestionnaire de réseau de distribution (Enedis, SRD, GEREDIS…), géré par un administrateur.
+model Grd {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  tickets     Ticket[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive, name])
+}
+
 model AgentCell {
   agentId   String
   cellId    String
@@ -104,6 +117,10 @@ model Ticket {
   status          TicketStatus @default(OPEN)
   categoryId      String?
   category        TicketCategory? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  grdId           String?
+  grd             Grd?        @relation(fields: [grdId], references: [id], onDelete: Restrict)
+  pdlPce          String?
+  haulogyTicketNumber String?
   cellId          String
   cell            Cell        @relation(fields: [cellId], references: [id], onDelete: Restrict)
   creatorId       String
@@ -121,6 +138,7 @@ model Ticket {
   @@index([cellId, status, createdAt])
   @@index([assigneeId, status])
   @@index([status, createdAt])
+  @@index([grdId])
 }
 
 model TicketReferenceCounter {

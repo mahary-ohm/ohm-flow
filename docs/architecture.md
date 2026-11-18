@@ -31,9 +31,11 @@ Le frontend utilise `NEXT_PUBLIC_API_URL` (par défaut `http://localhost:4000`).
 
 - Authentification: `POST /api/v1/auth/login`, `POST /api/v1/auth/logout`, `GET /api/v1/auth/me`.
 - Tickets: `GET/POST /api/v1/tickets`, `GET /api/v1/tickets/:id`, `POST /api/v1/tickets/:id/claim`, `PATCH /api/v1/tickets/:id/assignment`, `PATCH /api/v1/tickets/:id/status`, `GET/POST /api/v1/tickets/:id/comments`.
-- Administration: `GET/POST/PATCH/DELETE /api/v1/users`, `GET/POST/PATCH /api/v1/services`, `GET/POST/PATCH /api/v1/cells`, `GET/POST/PATCH /api/v1/ticket-categories`.
+- Administration: `GET/POST/PATCH/DELETE /api/v1/users`, `GET/POST/PATCH /api/v1/services`, `GET/POST/PATCH /api/v1/cells`, `GET/POST/PATCH /api/v1/ticket-categories`, `GET/POST/PATCH /api/v1/grds`.
 
 Les catégories de ticket sont gérées par un administrateur et désactivées logiquement. La création d’un nouveau ticket exige une catégorie active; les tickets existants peuvent rester sans catégorie.
+
+Les GRD (gestionnaires de réseau de distribution : Enedis, SRD, GEREDIS…) sont gérés par un administrateur et désactivés logiquement. La création d'un ticket exige un GRD actif ; le PDL/PCE et le numéro de ticket Haulogy sont facultatifs et inclus dans la recherche.
 - Indicateurs: `GET /api/v1/dashboard`.
 
 ## Limites fonctionnelles à traiter avant production

@@ -8,6 +8,7 @@ import {
   TicketCheck,
   UserRound,
   Users,
+  Zap,
 } from "lucide-react";
 import type { Role, TicketStatus } from "@ohmflow/shared";
 import type { Metrics, View } from "./ohmflow-types";
@@ -35,6 +36,7 @@ export function buildNavigation(role: Role, metrics: Metrics | null) {
           { id: "users" as const, label: "Utilisateurs", icon: Users, section: "ADMINISTRATION" },
           { id: "services" as const, label: "Services & cellules", icon: BriefcaseBusiness, section: "ADMINISTRATION" },
           { id: "categories" as const, label: "Catégories de tickets", icon: ClipboardList, section: "ADMINISTRATION" },
+          { id: "grds" as const, label: "GRD", icon: Zap, section: "ADMINISTRATION" },
         ]
       : []),
     { id: "profile" as const, label: "Mon profil", icon: UserRound, section: "COMPTE" },
@@ -49,6 +51,7 @@ export const pageTitles: Record<View, string> = {
   users: "Utilisateurs",
   services: "Services & cellules",
   categories: "Catégories de tickets",
+  grds: "Gestionnaires de réseau (GRD)",
   profile: "Mon profil",
 };
 

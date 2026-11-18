@@ -16,11 +16,16 @@ export const TicketQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
+/** Texte facultatif : une valeur vide est enregistrée comme null. */
+const optionalReference = z.string().trim().max(50).nullish().transform((value) => value || null);
 export const CreateTicketSchema = z.object({
   title: z.string().trim().min(3).max(160),
   description: z.string().trim().min(10).max(10000),
   cellId: z.string().min(1),
   categoryId: z.string().min(1),
+  grdId: z.string().min(1, "Choisissez un GRD"),
+  pdlPce: optionalReference,
+  haulogyTicketNumber: optionalReference,
 });
 export const CreateTicketCategorySchema = z.object({
   name: z.string().trim().min(2).max(80),
@@ -31,7 +36,19 @@ export const UpdateTicketSchema = z.object({
   description: z.string().trim().min(10).max(10000),
   cellId: z.string().min(1),
   categoryId: z.string().min(1),
+  grdId: z.string().min(1, "Choisissez un GRD"),
+  pdlPce: optionalReference,
+  haulogyTicketNumber: optionalReference,
   version: z.number().int().positive(),
+});
+export const CreateGrdSchema = z.object({
+  name: z.string().trim().min(2).max(80),
+  description: z.string().trim().max(500).optional(),
+});
+export const UpdateGrdSchema = z.object({
+  name: z.string().trim().min(2).max(80).optional(),
+  description: z.string().trim().max(500).nullable().optional(),
+  isActive: z.boolean().optional(),
 });
 export const UpdateTicketCategorySchema = z.object({
   name: z.string().trim().min(2).max(80).optional(),

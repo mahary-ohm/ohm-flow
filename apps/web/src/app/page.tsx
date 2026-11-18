@@ -31,6 +31,9 @@ export default function Home() {
     description: "",
     cellId: "",
     categoryId: "",
+    grdId: "",
+    pdlPce: "",
+    haulogyTicketNumber: "",
     version: 1,
   });
   const [search, setSearch] = useState("");
@@ -61,6 +64,7 @@ export default function Home() {
   const [ticketCategories, setTicketCategories] = useState<
     { id: string; name: string; description?: string | null }[]
   >([]);
+  const [ticketGrds, setTicketGrds] = useState<{ id: string; name: string }[]>([]);
   const [selectedAgent, setSelectedAgent] = useState("");
 
   const loginSchema = z.object({
@@ -70,7 +74,7 @@ export default function Home() {
   const loginForm = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
   });
-  const ticketForm = useForm<z.infer<typeof CreateTicketSchema>>({
+  const ticketForm = useForm<z.input<typeof CreateTicketSchema>, unknown, z.output<typeof CreateTicketSchema>>({
     resolver: zodResolver(CreateTicketSchema),
   });
 
@@ -121,13 +125,15 @@ export default function Home() {
     Promise.all([
       api<{ items: typeof ticketCells }>("/cells"),
       api<{ items: typeof ticketCategories }>("/ticket-categories"),
+      api<{ items: typeof ticketGrds }>("/grds"),
     ])
-      .then(([cellData, categoryData]) => {
+      .then(([cellData, categoryData, grdData]) => {
         setTicketCells(cellData.items);
         setTicketCategories(categoryData.items);
+        setTicketGrds(grdData.items);
       })
       .catch((e: unknown) =>
-        setError(e instanceof Error ? e.message : "Chargement des cellules et catégories impossible"),
+        setError(e instanceof Error ? e.message : "Chargement des cellules, catégories et GRD impossible"),
       );
   }, [user, view]);
   useEffect(() => {
@@ -247,15 +253,23 @@ export default function Home() {
       description: detail.description,
       cellId: detail.cellId,
       categoryId: detail.categoryId ?? "",
+      grdId: detail.grdId ?? "",
+      pdlPce: detail.pdlPce ?? "",
+      haulogyTicketNumber: detail.haulogyTicketNumber ?? "",
       version: detail.version,
     });
     try {
-      const [cellData, categoryData] = await Promise.all([
+      const [cellData, categoryData, grdData] = await Promise.all([
         api<{ items: typeof ticketCells }>("/cells"),
         api<{ items: typeof ticketCategories }>("/ticket-categories"),
+        api<{ items: typeof ticketGrds }>("/grds"),
       ]);
       setTicketCells(cellData.items);
       setTicketCategories(categoryData.items);
+      // Le GRD actuel reste sélectionnable même s'il a été désactivé depuis.
+      const grds = grdData.items;
+      if (detail.grd && !grds.some((grd) => grd.id === detail.grd?.id)) grds.push(detail.grd);
+      setTicketGrds(grds);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Chargement des options impossible");
     } finally {
@@ -288,7 +302,7 @@ export default function Home() {
       setBusy(false);
     }
   }
-  async function createTicket(values: z.infer<typeof CreateTicketSchema>) {
+  async function createTicket(values: z.output<typeof CreateTicketSchema>) {
     setBusy(true);
     setError("");
     try {
@@ -419,8 +433,7 @@ export default function Home() {
       )
     : [];
   const ticketCanBeEdited = Boolean(
-    user.role === "USER" &&
-      detail &&
+    detail &&
       detail.creator.id === user.id &&
       ["OPEN", "IN_PROGRESS", "WAITING"].includes(detail.status),
   );
@@ -440,12 +453,12 @@ export default function Home() {
         <section className="workspace fade-in">
           {error && <div className="error-banner">{error}</div>}
           {success && <div className="success-banner">{success}</div>}
-          <WorkspaceViews {...{ api, user, view, detail, metrics, recent, tickets, total, shownTickets, page, search, setSearch: changeSearch, statusFilter, setStatusFilter: changeStatusFilter, setPage, navClick, openTicket, ticketForm, createTicket, busy, ticketCategories, ticketCells, userName, metricCards, roleNames, initials, labels, Status, Empty }} />
+          <WorkspaceViews {...{ api, user, view, detail, metrics, recent, tickets, total, shownTickets, page, search, setSearch: changeSearch, statusFilter, setStatusFilter: changeStatusFilter, setPage, navClick, openTicket, ticketForm, createTicket, busy, ticketCategories, ticketCells, ticketGrds, userName, metricCards, roleNames, initials, labels, Status, Empty }} />
           {detail && (
             <TicketDetailView {...{
               user, detail, labels, Status, ticketCanBeEdited, ticketEditMode,
               setTicketEditMode, ticketEditOptionsLoading, ticketEditForm,
-              setTicketEditForm, ticketCells, ticketCategories, saveTicketEdit,
+              setTicketEditForm, ticketCells, ticketCategories, ticketGrds, saveTicketEdit,
               beginTicketEdit, claimTicket, setDetail, setView, busy, comment,
               setComment, addComment, agentsLoading, eligibleAgents,
               agentsLoadError, selectedAgent, setSelectedAgent, assignTicket,
