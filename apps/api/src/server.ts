@@ -10,7 +10,7 @@ import swaggerUi from "@fastify/swagger-ui";
 import argon2 from "argon2";
 import { z, ZodError } from "zod";
 import { Prisma } from "@prisma/client";
-import { ChangeStatusSchema, CommentSchema, CreateTicketCategorySchema, CreateTicketSchema, TicketQuerySchema, UpdateTicketCategorySchema, UpdateTicketSchema, statusTransitions, type Role } from "@ohmflow/shared";
+import { ChangeStatusSchema, CommentSchema, CreateGrdSchema, UpdateGrdSchema, CreateTicketCategorySchema, CreateTicketSchema, TicketQuerySchema, UpdateTicketCategorySchema, UpdateTicketSchema, statusTransitions, type Role } from "@ohmflow/shared";
 import { prisma } from "./db.js";
 import { buildTicketListWhere, ticketVisibilityScope } from "./ticket-scope.js";
 
@@ -114,7 +114,7 @@ export async function buildServer() {
     if (!ticket) return false;
     if (user.role === "ADMIN") return true;
     if (user.role === "USER") return user.cellId === ticket.cellId || ticket.creatorId === user.id;
-    if (ticket.assigneeId === user.id) return true;
+    if (ticket.assigneeId === user.id || ticket.creatorId === user.id) return true;
     return !!(await prisma.agentCell.findUnique({ where: { agentId_cellId: { agentId: user.id, cellId: ticket.cellId } } }));
   };
 
@@ -145,7 +145,7 @@ export async function buildServer() {
       prisma.ticket.count({ where: { ...scope, status: "IN_PROGRESS" } }),
       prisma.ticket.count({ where: { ...scope, status: "WAITING" } }),
       prisma.ticket.count({ where: { ...scope, status: "RESOLVED" } }),
-      prisma.ticket.findMany({ where: scope, orderBy: { updatedAt: "desc" }, take: 8, include: { cell: { include: { service: true } }, category: true, creator: safeUser, assignee: safeUser } }),
+      prisma.ticket.findMany({ where: scope, orderBy: { updatedAt: "desc" }, take: 8, include: { cell: { include: { service: true } }, category: true, grd: true, creator: safeUser, assignee: safeUser } }),
       user.role === "ADMIN" || user.role === "AGENT" ? prisma.ticket.count({ where: { ...scope, status: "OPEN", assigneeId: null } }) : Promise.resolve(0),
       user.role === "ADMIN" ? prisma.user.count({ where: { isActive: true } }) : Promise.resolve(null),
     ]);
@@ -157,30 +157,33 @@ export async function buildServer() {
     const user = request.authUser!;
     const where = buildTicketListWhere(user, query);
     const [items, total] = await Promise.all([
-      prisma.ticket.findMany({ where, orderBy: { updatedAt: "desc" }, skip: (query.page - 1) * query.pageSize, take: query.pageSize, include: { cell: { include: { service: true } }, category: true, creator: safeUser, assignee: safeUser } }),
+      prisma.ticket.findMany({ where, orderBy: { updatedAt: "desc" }, skip: (query.page - 1) * query.pageSize, take: query.pageSize, include: { cell: { include: { service: true } }, category: true, grd: true, creator: safeUser, assignee: safeUser } }),
       prisma.ticket.count({ where }),
     ]);
     return { items, total, page: query.page, pageSize: query.pageSize };
   });
 
-  app.post("/api/v1/tickets", { preHandler: requireRole("USER") }, async (request, reply) => {
+  app.post("/api/v1/tickets", { preHandler: requireUser }, async (request, reply) => {
     const input = CreateTicketSchema.parse(request.body);
     const user = request.authUser!;
     const activeCell = await prisma.cell.findFirst({ where: { id: input.cellId, isActive: true, service: { isActive: true } } });
     if (!activeCell) return reply.code(400).send({ error: "La cellule choisie est introuvable ou inactive" });
     const activeCategory = await prisma.ticketCategory.findFirst({ where: { id: input.categoryId, isActive: true } });
     if (!activeCategory) return reply.code(400).send({ error: "La catégorie choisie est introuvable ou inactive" });
+    const activeGrd = await prisma.grd.findFirst({ where: { id: input.grdId, isActive: true } });
+    if (!activeGrd) return reply.code(400).send({ error: "Le GRD choisi est introuvable ou inactif" });
     const created = await prisma.$transaction(async (tx) => {
       const year = new Date().getFullYear();
       const counter = await tx.ticketReferenceCounter.upsert({ where: { year }, create: { year, next: 1 }, update: { next: { increment: 1 } } });
-      const ticket = await tx.ticket.create({ data: { ...input, reference: `TCK-${year}-${String(counter.next).padStart(5, "0")}`, creatorId: user.id }, include: { cell: { include: { service: true } }, category: true, creator: safeUser } });
+      const ticket = await tx.ticket.create({ data: { ...input, reference: `TCK-${year}-${String(counter.next).padStart(5, "0")}`, creatorId: user.id }, include: { cell: { include: { service: true } }, category: true, grd: true, creator: safeUser } });
       await tx.ticketStatusHistory.create({ data: { ticketId: ticket.id, actorId: user.id, to: "OPEN" } });
       return ticket;
     });
     return reply.code(201).send({ ticket: created });
   });
 
-  app.patch("/api/v1/tickets/:id", { preHandler: requireRole("USER") }, async (request, reply) => {
+  // Tout rôle peut modifier les tickets dont il est le créateur (contrôlé ci-dessous).
+  app.patch("/api/v1/tickets/:id", { preHandler: requireUser }, async (request, reply) => {
     const { id } = z.object({ id: z.string() }).parse(request.params);
     const input = UpdateTicketSchema.parse(request.body);
     const user = request.authUser!;
@@ -189,25 +192,28 @@ export async function buildServer() {
     if (["RESOLVED", "CLOSED"].includes(current.status)) return reply.code(409).send({ error: "Un ticket résolu ou clôturé ne peut plus être modifié" });
     if (current.version !== input.version) return reply.code(409).send({ error: "Le ticket a été modifié. Rechargez la page." });
 
-    const [activeCell, activeCategory] = await Promise.all([
+    const [activeCell, activeCategory, validGrd] = await Promise.all([
       prisma.cell.findFirst({ where: { id: input.cellId, isActive: true, service: { isActive: true } } }),
       prisma.ticketCategory.findFirst({ where: { id: input.categoryId, isActive: true } }),
+      // Un GRD désactivé depuis reste accepté s'il est déjà celui du ticket.
+      prisma.grd.findFirst({ where: { id: input.grdId, ...(input.grdId === current.grdId ? {} : { isActive: true }) } }),
     ]);
     if (!activeCell) return reply.code(400).send({ error: "La cellule choisie est introuvable ou inactive" });
     if (!activeCategory) return reply.code(400).send({ error: "La catégorie choisie est introuvable ou inactive" });
+    if (!validGrd) return reply.code(400).send({ error: "Le GRD choisi est introuvable ou inactif" });
 
     const updated = await prisma.ticket.updateMany({
       where: { id, creatorId: user.id, status: { in: ["OPEN", "IN_PROGRESS", "WAITING"] }, version: input.version },
-      data: { title: input.title, description: input.description, cellId: input.cellId, categoryId: input.categoryId, version: { increment: 1 } },
+      data: { title: input.title, description: input.description, cellId: input.cellId, categoryId: input.categoryId, grdId: input.grdId, pdlPce: input.pdlPce, haulogyTicketNumber: input.haulogyTicketNumber, version: { increment: 1 } },
     });
     if (!updated.count) return reply.code(409).send({ error: "Le ticket a changé d’état ou a été modifié simultanément" });
-    return { ticket: await prisma.ticket.findUnique({ where: { id }, include: { cell: { include: { service: true } }, category: true, creator: safeUser, assignee: safeUser } }) };
+    return { ticket: await prisma.ticket.findUnique({ where: { id }, include: { cell: { include: { service: true } }, category: true, grd: true, creator: safeUser, assignee: safeUser } }) };
   });
 
   app.get("/api/v1/tickets/:id", { preHandler: requireUser }, async (request, reply) => {
     const { id } = z.object({ id: z.string() }).parse(request.params);
     if (!(await canAccessTicket(request, id))) return reply.code(404).send({ error: "Ticket introuvable" });
-    return { ticket: await prisma.ticket.findUnique({ where: { id }, include: { cell: { include: { service: true } }, category: true, creator: safeUser, assignee: safeUser, statusHistory: { orderBy: { createdAt: "asc" }, include: { actor: safeUser } }, assignmentHistory: { orderBy: { createdAt: "asc" }, include: { actor: safeUser } }, comments: { orderBy: { createdAt: "asc" }, include: { author: safeUser } } } }) };
+    return { ticket: await prisma.ticket.findUnique({ where: { id }, include: { cell: { include: { service: true } }, category: true, grd: true, creator: safeUser, assignee: safeUser, statusHistory: { orderBy: { createdAt: "asc" }, include: { actor: safeUser } }, assignmentHistory: { orderBy: { createdAt: "asc" }, include: { actor: safeUser } }, comments: { orderBy: { createdAt: "asc" }, include: { author: safeUser } } } }) };
   });
 
   app.post("/api/v1/tickets/:id/claim", { preHandler: requireRole("AGENT") }, async (request, reply) => {
@@ -288,6 +294,16 @@ export async function buildServer() {
   });
 
   app.get("/api/v1/services", { preHandler: requireUser }, async (request) => ({ items: await prisma.service.findMany({ where: request.authUser?.role === "ADMIN" ? {} : { isActive: true }, orderBy: { name: "asc" }, include: { cells: { where: request.authUser?.role === "ADMIN" ? {} : { isActive: true } } } }) }));
+  app.get("/api/v1/grds", { preHandler: requireUser }, async (request) => ({ items: await prisma.grd.findMany({ where: request.authUser?.role === "ADMIN" ? {} : { isActive: true }, orderBy: { name: "asc" } }) }));
+  app.post("/api/v1/grds", { preHandler: requireRole("ADMIN") }, async (request, reply) => {
+    const input = CreateGrdSchema.parse(request.body);
+    return reply.code(201).send({ grd: await prisma.grd.create({ data: input }) });
+  });
+  app.patch("/api/v1/grds/:id", { preHandler: requireRole("ADMIN") }, async (request) => {
+    const { id } = z.object({ id: z.string() }).parse(request.params);
+    const input = UpdateGrdSchema.parse(request.body);
+    return { grd: await prisma.grd.update({ where: { id }, data: input }) };
+  });
   app.get("/api/v1/ticket-categories", { preHandler: requireUser }, async (request) => ({ items: await prisma.ticketCategory.findMany({ where: request.authUser?.role === "ADMIN" ? {} : { isActive: true }, orderBy: { name: "asc" } }) }));
   app.post("/api/v1/ticket-categories", { preHandler: requireRole("ADMIN") }, async (request, reply) => {
     const input = CreateTicketCategorySchema.parse(request.body);

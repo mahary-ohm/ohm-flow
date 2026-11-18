@@ -22,6 +22,10 @@ describe("périmètre de visibilité des tickets", () => {
     expect(conditions).toHaveLength(4);
   });
 
+  it("permet à l'agent de voir les tickets qu'il a créés", () => {
+    expect(ticketVisibilityScope(agent).OR).toContainEqual({ creatorId: "agent-1" });
+  });
+
   it("ne restreint pas l'administrateur", () => {
     expect(ticketVisibilityScope(admin)).toEqual({});
   });
