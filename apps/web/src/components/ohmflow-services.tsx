@@ -1,59 +1,15 @@
 import { BriefcaseBusiness, Plus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useAdminServices } from "../hooks/use-admin-services";
+import type { ApiClient } from "../lib/api";
 import { Empty } from "./ohmflow-tickets";
-export function AdminServices({ api }: { api: <T>(path: string, init?: RequestInit) => Promise<T> }) {
-  const [items, setItems] = useState<{
-    id: string;
-    name: string;
-    isActive: boolean;
-    cells: { id: string; name: string; isActive: boolean }[];
-  }[]>([]);
-  const [error, setError] = useState("");
-  const [serviceName, setServiceName] = useState("");
-  const [cellName, setCellName] = useState("");
-  const [serviceId, setServiceId] = useState("");
+
+export function AdminServices({ api }: { api: ApiClient }) {
+  const {
+    items, error, serviceName, setServiceName, cellName, setCellName,
+    serviceId, setServiceId, createService, createCell, toggleCell,
+  } = useAdminServices(api);
   const [show, setShow] = useState(false);
-
-  async function load() {
-    try {
-      const data = await api<{ items: typeof items }>('/services');
-      setItems(data.items);
-      setError("");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Chargement impossible');
-    }
-  }
-
-  useEffect(() => { void load(); }, []);
-
-  async function createService() {
-    try {
-      await api('/services', { method: 'POST', body: JSON.stringify({ name: serviceName }) });
-      setServiceName('');
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Création impossible');
-    }
-  }
-
-  async function createCell() {
-    try {
-      await api('/cells', { method: 'POST', body: JSON.stringify({ name: cellName, serviceId }) });
-      setCellName('');
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Création impossible');
-    }
-  }
-
-  async function toggleCell(cell: { id: string; isActive: boolean }) {
-    try {
-      await api(`/cells/${cell.id}`, { method: 'PATCH', body: JSON.stringify({ isActive: !cell.isActive }) });
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Modification impossible');
-    }
-  }
 
   return (
     <>

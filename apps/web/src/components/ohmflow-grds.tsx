@@ -1,68 +1,22 @@
 import { Plus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useReferenceList } from "../hooks/use-reference-list";
+import type { ApiClient } from "../lib/api";
 import { Empty } from "./ohmflow-tickets";
-export function AdminGrds({ api }: { api: <T>(path: string, init?: RequestInit) => Promise<T> }) {
-  type Grd = {
-    id: string;
-    name: string;
-    description: string | null;
-    isActive: boolean;
-  };
 
-  const [items, setItems] = useState<Grd[]>([]);
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-  const [busy, setBusy] = useState(false);
+const messages = {
+  loadError: "Chargement des GRD impossible",
+  created: "Le GRD a été créé.",
+  createError: "Création du GRD impossible",
+  deactivated: "Le GRD a été désactivé.",
+  reactivated: "Le GRD a été réactivé.",
+  updateError: "Modification du GRD impossible",
+};
 
-  async function load() {
-    try {
-      const data = await api<{ items: Grd[] }>('/grds');
-      setItems(data.items);
-      setError("");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Chargement des GRD impossible');
-    }
-  }
-
-  useEffect(() => { void load(); }, []);
-
-  async function createGrd(event: React.FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    setError("");
-    setSuccess("");
-    try {
-      await api('/grds', {
-        method: 'POST',
-        body: JSON.stringify({ name, description: description.trim() || undefined }),
-      });
-      setName("");
-      setDescription("");
-      setSuccess('Le GRD a été créé.');
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Création du GRD impossible');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function toggleGrd(grd: Grd) {
-    setError("");
-    setSuccess("");
-    try {
-      await api(`/grds/${grd.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ isActive: !grd.isActive }),
-      });
-      setSuccess(grd.isActive ? 'Le GRD a été désactivé.' : 'Le GRD a été réactivé.');
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Modification du GRD impossible');
-    }
-  }
+export function AdminGrds({ api }: { api: ApiClient }) {
+  const {
+    items, name, setName, description, setDescription, error, success, busy,
+    create: createGrd, toggle: toggleGrd,
+  } = useReferenceList(api, "/grds", messages);
 
   return (
     <>

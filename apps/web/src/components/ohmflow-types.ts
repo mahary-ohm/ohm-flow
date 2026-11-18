@@ -54,6 +54,29 @@ export type TicketDetail = Ticket & {
   comments: { id: string; content: string; createdAt: string; author: User }[];
 };
 
+export type CellOption = { id: string; name: string; service: { name: string } };
+export type CategoryOption = { id: string; name: string; description?: string | null };
+export type GrdOption = { id: string; name: string };
+export type AgentOption = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  isActive: boolean;
+  agentCells: { cellId: string }[];
+};
+
+/** Formulaire de modification d'un ticket par son créateur. */
+export type TicketEditForm = {
+  title: string;
+  description: string;
+  cellId: string;
+  categoryId: string;
+  grdId: string;
+  pdlPce: string;
+  haulogyTicketNumber: string;
+  version: number;
+};
+
 export type View =
   | "dashboard"
   | "tickets"

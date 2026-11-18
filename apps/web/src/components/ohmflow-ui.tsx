@@ -2,23 +2,7 @@ import { Activity, ClipboardList } from "lucide-react";
 import type { Role, TicketStatus } from "@ohmflow/shared";
 import type { User } from "./ohmflow-types";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
-
-export async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API}/api/v1${path}`, {
-    ...init,
-    credentials: "include",
-    headers: { "Content-Type": "application/json", ...init?.headers },
-  });
-  if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as {
-      error?: string;
-    } | null;
-    throw new Error(body?.error ?? `Erreur ${response.status}`);
-  }
-  if (response.status === 204) return undefined as T;
-  return response.json() as Promise<T>;
-}
+export { api } from "../lib/api";
 
 export const labels: Record<TicketStatus, string> = {
   OPEN: "À traiter",
