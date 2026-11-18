@@ -85,6 +85,9 @@ export default function Home() {
     const params = new URLSearchParams({ page: String(page), pageSize: "20" });
     if (search.trim()) params.set("q", search.trim());
     if (statusFilter) params.set("status", statusFilter);
+    // Vue agents : tickets libres ou déjà attribués à l'agent, filtrés côté serveur
+    // pour que la pagination et le total restent exacts.
+    if (view === "agents") params.set("available", "true");
     const data = await api<{ items: Ticket[]; total: number }>(
       `/tickets?${params}`,
     );
@@ -97,7 +100,7 @@ export default function Home() {
       await Promise.all([loadDashboard(), loadTickets()]);
     } catch (e) {
       setError(
-        e instanceof Error ? e.message : "Impossible de charger les donn├®es",
+        e instanceof Error ? e.message : "Impossible de charger les données",
       );
     }
   }
@@ -108,8 +111,11 @@ export default function Home() {
       .finally(() => setLoading(false));
   }, []);
   useEffect(() => {
-    if (user) void reload();
-  }, [user, page, statusFilter]);
+    if (user)
+      void loadDashboard().catch((e: unknown) =>
+        setError(e instanceof Error ? e.message : "Impossible de charger les données"),
+      );
+  }, [user]);
   useEffect(() => {
     if (!user || view !== "new") return;
     Promise.all([
@@ -121,7 +127,7 @@ export default function Home() {
         setTicketCategories(categoryData.items);
       })
       .catch((e: unknown) =>
-        setError(e instanceof Error ? e.message : "Chargement des cellules et cat├®gories impossible"),
+        setError(e instanceof Error ? e.message : "Chargement des cellules et catégories impossible"),
       );
   }, [user, view]);
   useEffect(() => {
@@ -175,14 +181,24 @@ export default function Home() {
   }, [user, detail?.id]);
   useEffect(() => {
     if (!user) return;
+    // Un seul chargement (avec anti-rebond pour la saisie) pour tous les critères de liste.
     const timer = setTimeout(() => {
-      if (view === "tickets" || view === "agents")
-        void loadTickets().catch((e: unknown) =>
-          setError(e instanceof Error ? e.message : "Erreur"),
-        );
+      void loadTickets().catch((e: unknown) =>
+        setError(e instanceof Error ? e.message : "Erreur"),
+      );
     }, 220);
     return () => clearTimeout(timer);
-  }, [search, user, view]);
+  }, [search, user, view, page, statusFilter]);
+
+  // Tout changement de critère ramène à la première page.
+  const changeSearch = (value: string) => {
+    setSearch(value);
+    setPage(1);
+  };
+  const changeStatusFilter = (value: string) => {
+    setStatusFilter(value);
+    setPage(1);
+  };
 
   async function onLogin(values: z.infer<typeof loginSchema>) {
     setBusy(true);
@@ -251,7 +267,7 @@ export default function Home() {
     if (!detail) return;
     const parsed = UpdateTicketSchema.safeParse(ticketEditForm);
     if (!parsed.success) {
-      setError("V├®rifiez lÔÇÖobjet, la description, la cellule et la cat├®gorie du ticket.");
+      setError("Vérifiez l’objet, la description, la cellule et la catégorie du ticket.");
       return;
     }
     setBusy(true);
@@ -264,7 +280,7 @@ export default function Home() {
       const refreshed = await api<{ ticket: TicketDetail }>(`/tickets/${detail.id}`);
       setDetail(refreshed.ticket);
       setTicketEditMode(false);
-      setSuccess("Votre ticket a ├®t├® modifi├®.");
+      setSuccess("Votre ticket a été modifié.");
       await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Modification du ticket impossible");
@@ -278,11 +294,11 @@ export default function Home() {
     try {
       await api("/tickets", { method: "POST", body: JSON.stringify(values) });
       ticketForm.reset();
-      setSuccess("Votre demande a bien ├®t├® cr├®├®e.");
+      setSuccess("Votre demande a bien été créée.");
       setView("tickets");
       await reload();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Cr├®ation impossible");
+      setError(e instanceof Error ? e.message : "Création impossible");
     } finally {
       setBusy(false);
     }
@@ -295,7 +311,7 @@ export default function Home() {
       await api(`/tickets/${detail.id}/claim`, { method: "POST" });
       await openTicket(detail);
       await reload();
-      setSuccess("Le ticket vous est attribu├®.");
+      setSuccess("Le ticket vous est attribué.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Prise en charge impossible");
     } finally {
@@ -313,9 +329,9 @@ export default function Home() {
       });
       await openTicket(detail);
       await reload();
-      setSuccess("Le statut du ticket a ├®t├® mis ├á jour.");
+      setSuccess("Le statut du ticket a été mis à jour.");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Mise ├á jour impossible");
+      setError(e instanceof Error ? e.message : "Mise à jour impossible");
     } finally {
       setBusy(false);
     }
@@ -331,7 +347,7 @@ export default function Home() {
       });
       setComment("");
       await openTicket(detail);
-      setSuccess("Commentaire ajout├®.");
+      setSuccess("Commentaire ajouté.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Envoi impossible");
     } finally {
@@ -353,7 +369,7 @@ export default function Home() {
       setSelectedAgent("");
       await openTicket(detail);
       await reload();
-      setSuccess("Le ticket a ├®t├® affect├®.");
+      setSuccess("Le ticket a été affecté.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Affectation impossible");
     } finally {
@@ -392,12 +408,7 @@ export default function Home() {
 
   const nav = buildNavigation(user.role, metrics);
   const userName = `${user.firstName} ${user.lastName}`;
-  const shownTickets =
-    view === "agents"
-      ? tickets.filter(
-          (ticket) => !ticket.assignee || ticket.assignee.id === user.id,
-        )
-      : tickets;
+  const shownTickets = tickets;
   const eligibleAgents = detail
     ? agentOptions.filter(
         (agent) =>
@@ -417,6 +428,7 @@ export default function Home() {
 
   const navClick = (next: View) => {
     setView(next);
+    setPage(1);
     setDetail(null);
     setError("");
     setSuccess("");
@@ -428,7 +440,7 @@ export default function Home() {
         <section className="workspace fade-in">
           {error && <div className="error-banner">{error}</div>}
           {success && <div className="success-banner">{success}</div>}
-          <WorkspaceViews {...{ api, user, view, detail, metrics, recent, tickets, total, shownTickets, page, search, setSearch, statusFilter, setStatusFilter, setPage, navClick, openTicket, ticketForm, createTicket, busy, ticketCategories, ticketCells, userName, metricCards, roleNames, initials, labels, Status, Empty }} />
+          <WorkspaceViews {...{ api, user, view, detail, metrics, recent, tickets, total, shownTickets, page, search, setSearch: changeSearch, statusFilter, setStatusFilter: changeStatusFilter, setPage, navClick, openTicket, ticketForm, createTicket, busy, ticketCategories, ticketCells, userName, metricCards, roleNames, initials, labels, Status, Empty }} />
           {detail && (
             <TicketDetailView {...{
               user, detail, labels, Status, ticketCanBeEdited, ticketEditMode,

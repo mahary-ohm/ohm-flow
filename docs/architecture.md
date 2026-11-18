@@ -25,6 +25,8 @@ La référence lisible est unique en base. Un compteur annuel verrouillé par up
 
 Le frontend utilise `NEXT_PUBLIC_API_URL` (par défaut `http://localhost:4000`). La session de développement utilise le stockage mémoire Fastify; configurez un store PostgreSQL/Redis avant toute mise en production, car les sessions mémoire ne survivent pas aux redémarrages et ne conviennent pas au multi-instance.
 
+`TRUST_PROXY=true` n'est à activer que derrière un reverse proxy de confiance (sinon l'en-tête `X-Forwarded-For` est falsifiable et contourne la limitation de débit de connexion). Swagger (`/docs`) est désactivé quand `NODE_ENV=production`, sauf si `ENABLE_API_DOCS=true`.
+
 ## Routes principales
 
 - Authentification: `POST /api/v1/auth/login`, `POST /api/v1/auth/logout`, `GET /api/v1/auth/me`.
