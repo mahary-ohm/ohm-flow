@@ -1,4 +1,10 @@
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+/**
+ * URL de l'API. Sans NEXT_PUBLIC_API_URL, on vise le même nom d'hôte que la page
+ * (localhost, 127.0.0.1, IP du réseau…) : l'API reste « same-site » et le cookie de session est envoyé.
+ */
+const API =
+  process.env.NEXT_PUBLIC_API_URL ??
+  (typeof window !== "undefined" ? `${window.location.protocol}//${window.location.hostname}:4000` : "http://localhost:4000");
 
 export type ApiClient = <T>(path: string, init?: RequestInit) => Promise<T>;
 
